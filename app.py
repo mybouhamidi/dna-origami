@@ -62,6 +62,7 @@ class Worker(QObject):
         find_thief(self, mfold)
         mfold.clean_all()
         self.finished.emit()
+        self.parent.btn3.setEnabled(True)
 
 
 def find_thief(self, mfold):
@@ -633,6 +634,7 @@ class DNA_origami(QWidget):
             error.showMessage("Please respect the configuration file format")
 
     def calculate(self):
+        self.btn3.setEnabled(False)
         flag_range = False
         flag_empty = False
         index = 0
@@ -656,12 +658,15 @@ class DNA_origami(QWidget):
         if flag_empty:
             error = QErrorMessage(self)
             error.showMessage("Please provide a structure")
+            self.btn3.setEnabled(True)
+            
 
         if self.header[index] in self.fixed_regions.keys():
             error = QErrorMessage(self)
             error.showMessage(
                 f"Please make sure to uncheck the field {self.header[index].lower()} to allow modifications"
             )
+            self.btn3.setEnabled(True)
 
         else:
             if flag_range:
