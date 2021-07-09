@@ -21,9 +21,6 @@ import re
 # able25 ABB36 abre25, ABRE25 abb36 ABLE25, acle25 ACB36 acre25, ACRE25 acb36 ACLE25, adle25 ADB36 adre25, ADRE25 adb36 ADLE25
 
 # To do:
-# Change heatmap colors V
-# Loop preoptimize calculate step V
-# preserve gc content with preoptimize V
 
 
 class Looper(QObject):
@@ -37,7 +34,6 @@ class Looper(QObject):
     def run_routine(self):
         self.parent.calculate()
         while not self.parent.btn3.isEnabled():
-            # print(self.parent.btn3.isEnabled())
             _ = 0
 
         self.parent.automate = True
@@ -84,7 +80,6 @@ class Worker(QObject):
         find_thief(self, mfold)
         mfold.clean_all()
         self.finished.emit()
-        # self.parent.btn3.setEnabled(True)
 
 
 def find_thief(self, mfold):
@@ -983,10 +978,15 @@ class DNA_origami(QWidget):
             text = self.iterator - 1
             if text == 0:
                 ok = False
+                self.automate = False
             else:
-                while not self.threader.isFinished():
-                    self.threader.wait()
-
+                try:
+                    while not self.threader.isFinished():
+                        self.threader.wait()
+                except RuntimeError:
+                    self.automate = False
+                    self.loop_calculation()
+        
         if ok:
             if str(text) != "":
                 if int(text) < 0:
@@ -1023,10 +1023,10 @@ class DNA_origami(QWidget):
 
         if not ok:
             self.best_run()
-            self.automate = False
             self.iterator = 0
             self.file_counter = 0
             self.btn9.setEnabled(True)
+            self.btn8.setEnabled(True)
 
     def output_image(self):
         filename = QFileDialog.getSaveFileName(
