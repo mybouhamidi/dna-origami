@@ -1,4 +1,4 @@
-import sys, yaml, json, random
+import sys, yaml, json, random, time, os
 
 # Import QApplication and the required widgets from PyQt5.QtWidgets
 from PyQt5.QtCore import *
@@ -17,12 +17,34 @@ from genetic import Sequence
 
 import re
 
+# abl20 able25, abre25 abr20, ABRE25 abd36 ABLE25, able25 ABD36 abre25, acl20 acle25, acre25 acr20, ACRE25 acd36 ACLE25, acle25 ACD36 acre25
+# able25 ABB36 abre25, ABRE25 abb36 ABLE25, acle25 ACB36 acre25, ACRE25 acb36 ACLE25, adle25 ADB36 adre25, ADRE25 adb36 ADLE25
 
 # To do:
-# Sanity checks
-# GC content flag automated V
-# Pre optimize highlighted fields
-# sanity checks highlighted fields (a25... )
+# Change heatmap colors V
+# Loop preoptimize calculate step V
+# preserve gc content with preoptimize V
+
+
+class Looper(QObject):
+    finished = pyqtSignal()
+    progression = pyqtSignal()
+
+    def __init__(self, parent):
+        QObject.__init__(self)
+        self.parent = parent
+
+    def run_routine(self):
+        self.parent.calculate()
+        while not self.parent.btn3.isEnabled():
+            # print(self.parent.btn3.isEnabled())
+            _ = 0
+
+        self.parent.automate = True
+        time.sleep(1)
+        self.progression.emit()
+        time.sleep(1)
+        self.finished.emit()
 
 
 class Worker(QObject):
@@ -62,7 +84,7 @@ class Worker(QObject):
         find_thief(self, mfold)
         mfold.clean_all()
         self.finished.emit()
-        self.parent.btn3.setEnabled(True)
+        # self.parent.btn3.setEnabled(True)
 
 
 def find_thief(self, mfold):
@@ -162,10 +184,7 @@ def gc_content(gc, self):
         index += 1
 
     for i in range(len(temp)):
-        for _ in temp[i]:
-            if _ == "G" or _ == "C":
-                gci += 1
-
+        gci = int(temp[i].count("C")) + int(temp[i].count("G"))
         gc.append(gci)
         gci = 0
 
@@ -285,6 +304,9 @@ class DNA_origami(QWidget):
         self.input_sequence = {}
         self.field = []
         self.raw_structure = None
+        self.automate = False
+        self.iterator = 0
+        self.file_counter = 0
         self.thief = None
         self.strand = []
         self.highlighted = []
@@ -350,10 +372,17 @@ class DNA_origami(QWidget):
         self.btn8.setStyleSheet(
             "QPushButton {background-color: #007bff; color: white; border: 5px solid transparent; border-radius: 5px}"
         )
+        self.btn9 = QPushButton("Pre-optimize" + "\n" + " + " + "\n" + "Calculate")
+        self.btn9.setFixedSize(150, 70)
+        self.btn9.setIconSize(QSize(30, 30))
+        self.btn9.setStyleSheet(
+            "QPushButton {background-color: #007bff; color: white; border: 5px solid transparent; border-radius: 5px}"
+        )
         self.btn5.clicked.connect(self.load)
         self.btn6.clicked.connect(self.output_image)
         self.btn7.clicked.connect(self.output_data)
         self.btn8.clicked.connect(self.randomize_strand)
+        self.btn9.clicked.connect(self.loop_calculation)
         self.canvas = FigureCanvas(plt.Figure(figsize=(7, 7)))
         self.canvas.setFixedSize(500, 500)
         main_layout = QHBoxLayout()
@@ -366,12 +395,15 @@ class DNA_origami(QWidget):
         self.top_layout.setSpacing(150)
         self.center_layout = QFormLayout()
         self.bottom_layout = QHBoxLayout()
+        temp_vertical = QVBoxLayout()
         self.bottom_layout.setSpacing(30)
         self.right_side = QVBoxLayout()
         self.left_side = QVBoxLayout()
         self.top_layout.addWidget(self.btn1)
         self.top_layout.addWidget(self.btn2)
-        self.bottom_layout.addWidget(self.btn8)
+        temp_vertical.addWidget(self.btn8)
+        temp_vertical.addWidget(self.btn9)
+        self.bottom_layout.addLayout(temp_vertical)
         self.bottom_layout.addWidget(self.btn3)
         self.bottom_layout.addWidget(self.btn4)
         self.bottom_layout.addWidget(self.btn5)
@@ -659,7 +691,6 @@ class DNA_origami(QWidget):
             error = QErrorMessage(self)
             error.showMessage("Please provide a structure")
             self.btn3.setEnabled(True)
-            
 
         if self.header[index] in self.fixed_regions.keys():
             error = QErrorMessage(self)
@@ -680,10 +711,11 @@ class DNA_origami(QWidget):
 
                 self.worker.progression.connect(lambda x: self.progress.setValue(x))
                 self.worker.progress.connect(lambda x: self.progress.setFormat(x))
-                self.worker.finished.connect(self.thread.quit)
                 self.worker.finished.connect(self.update)
                 self.worker.finished.connect(self.highlight_thief)
+                self.worker.finished.connect(self.thread.quit)
                 self.worker.finished.connect(self.worker.deleteLater)
+                self.worker.finished.connect(self.thread.wait)
                 self.thread.finished.connect(self.thread.deleteLater)
 
                 self.progress.setValue(1)
@@ -780,12 +812,20 @@ class DNA_origami(QWidget):
                     self.index.append(_)
 
                 text = self.strand[strand1].bases
-                highlighted = str(
-                    f"{text[:atindex-1]}[{text[atindex-1:end-1]}]{text[end-1:]}"
-                )
 
-                tools = []
+                if atindex > end:
+                    highlighted = str(f"{text[:atindex-1]}[{text[atindex-1:]}]")
+                if atindex == end:
+                    highlighted = str(
+                        f"{text[:atindex-1]}[{text[atindex-1:end]}]{text[end:]}"
+                    )
+                else:
+                    highlighted = str(
+                        f"{text[:atindex-1]}[{text[atindex-1:end-1]}]{text[end-1:]}"
+                    )
+
                 counter = 0
+                tools = []
                 flag = False
                 end = False
                 start = True
@@ -855,16 +895,22 @@ class DNA_origami(QWidget):
                     else:
                         counter += 1
                 break
+        self.btn3.setEnabled(True)
 
     def randomize_strand(self):
-        window = QMessageBox()
-        reply = window.question(
-            self,
-            "Randomization",
-            "Do you want to randomize the highlighted sequences (GC content may change) ?",
-            QMessageBox.Yes | QMessageBox.No,
-            0,
-        )
+        if not self.automate:
+            window = QMessageBox()
+            reply = window.question(
+                self,
+                "Randomization",
+                "Do you want to randomize the highlighted sequences (GC content may change) ?",
+                QMessageBox.Yes | QMessageBox.No,
+                0,
+            )
+
+        if self.automate:
+            reply = QMessageBox.Yes
+
         if reply == QMessageBox.Yes:
             if self.highlighted == []:
                 error = QErrorMessage(self)
@@ -884,7 +930,7 @@ class DNA_origami(QWidget):
                                 flag = False
 
                             elif flag:
-                                text += random.choice("ACGT")
+                                text += random.choice("GTCA")
 
                             elif self.highlighted[i][j][k] == "[":
                                 flag = True
@@ -895,24 +941,92 @@ class DNA_origami(QWidget):
                         if text != "":
                             fields.append(text)
 
-                # abl20 able25, abre25 abr20, ABRE25 abd36 ABLE25, able25 ABD36 abre25, acl20 acle25, acre25 acr20, ACRE25 acd36 ACLE25, acle25 ACD36 acre25
-
                 counter = 0
                 for i in self.index:
-                    if self.header[i] in self.fixed_regions.keys():
-                        error = QErrorMessage(self)
-                        error.showMessage(
-                            f"Please make sure to uncheck the field {self.header[i].lower()} to allow modifications"
-                        )
+                    gc = []
+                    data = gc_content(gc, self)
+                    if gc[i] != int(fields[counter].count("G")) + int(
+                        fields[counter].count("C")
+                    ):
+                        flag = True
+                        self.automate = True
+                    if flag:
+                        self.randomize_strand()
                         break
                     else:
-                        self.field[i].setText(fields[counter])
-                        self.field[i].setModified(True)
-                        counter += 1
-                        self.strand_update()
+                        if self.header[i] in self.fixed_regions.keys():
+                            error = QErrorMessage(self)
+                            error.showMessage(
+                                f"Please make sure to uncheck the field {self.header[i].lower()} to allow modifications"
+                            )
+                            break
+
+                        else:
+                            self.field[i].setText(fields[counter])
+                            self.field[i].setModified(True)
+                            counter += 1
+                            self.strand_update()
 
                 if counter == len(self.index):
                     self.highlighted.clear()
+
+    def loop_calculation(self):
+        if not self.automate:
+            input = QInputDialog()
+            text, ok = input.getText(
+                self,
+                "Iterations required",
+                "Please provide the number of iterations",
+            )
+        if self.automate:
+            ok = True
+            text = self.iterator - 1
+            if text == 0:
+                ok = False
+            else:
+                while not self.threader.isFinished():
+                    self.threader.wait()
+
+        if ok:
+            if str(text) != "":
+                if int(text) < 0:
+                    error = QErrorMessage(self)
+                    error.showMessage(
+                        f"Please make sure to provide an integer value greater than 0"
+                    )
+
+                if self.field == []:
+                    error = QErrorMessage(self)
+                    error.showMessage(f"Please make sure to provide a structure")
+
+                else:
+                    if int(text) != 0:
+                        self.btn9.setEnabled(False)
+                        self.btn8.setEnabled(False)
+                        self.iterator = int(text)
+
+                        self.automate = True
+                        self.threader = QThread()
+                        self.looper = Looper(self)
+                        self.looper.moveToThread(self.threader)
+                        self.threader.started.connect(self.looper.run_routine)
+
+                        self.threader.start()
+
+                        self.looper.progression.connect(self.randomize_strand)
+                        self.looper.progression.connect(self.loop_saver)
+                        self.looper.finished.connect(self.threader.quit)
+                        self.looper.finished.connect(self.looper.deleteLater)
+                        self.looper.finished.connect(self.threader.wait)
+                        self.looper.finished.connect(self.loop_calculation)
+                        self.threader.finished.connect(self.threader.deleteLater)
+
+        if not ok:
+            self.best_run()
+            self.automate = False
+            self.iterator = 0
+            self.file_counter = 0
+            self.btn9.setEnabled(True)
 
     def output_image(self):
         filename = QFileDialog.getSaveFileName(
@@ -956,7 +1070,7 @@ class DNA_origami(QWidget):
             ax = self.canvas.figure.subplots()
 
             if self.max != 0:
-                im = ax.imshow(a, cmap="hot", interpolation="nearest", vmax=self.max)
+                im = ax.imshow(a, cmap="hot_r", interpolation="nearest", vmax=self.max)
                 ax.set_xticks(np.arange(len(ticks)))
                 ax.set_yticks(np.arange(len(ticks)))
                 ax.set_xticklabels(ticks, rotation=20, ha="right")
@@ -964,7 +1078,7 @@ class DNA_origami(QWidget):
                 ax.set_title("Energy Matrix for the different regions")
 
             else:
-                im = ax.imshow(a, cmap="hot", interpolation="nearest")
+                im = ax.imshow(a, cmap="hot_r", interpolation="nearest")
                 ax.set_xticks(np.arange(len(ticks)))
                 ax.set_yticks(np.arange(len(ticks)))
                 ax.set_xticklabels(ticks, rotation=20, ha="right", fontsize=8)
@@ -987,6 +1101,53 @@ class DNA_origami(QWidget):
             event.accept()
         else:
             event.ignore()
+
+    def loop_saver(self):
+        if self.file_counter == 0:
+            cwd = os.getcwd()
+            test = os.listdir(cwd)
+            for item in test:
+                if item.endswith(".dat"):
+                    os.remove(os.path.join(cwd, item))
+        params = {}
+        data = gc_content([], self)
+        for i in range(len(self.header)):
+            self.input_sequence[self.header[i]] = data[self.header[i]]
+
+        params["raw_structure"] = self.raw_structure
+        params["mfold_command"] = "./mfold_quik"
+        params["boltzmann_factor"] = 1
+        params["fixed_regions"] = self.fixed_regions
+        params["input_sequence_definitions"] = self.input_sequence
+        params["energy_matrix"] = self.energy
+        try:
+            with open(str(f"loop-{self.file_counter}" + ".dat"), "w") as configfile:
+                yaml.dump(params, configfile)
+        except FileNotFoundError:
+            pass
+
+        self.file_counter += 1
+
+    def best_run(self):
+        counter = []
+        length = self.file_counter
+
+        for i in range(length):
+            higher = 0
+            with open(str(f"loop-{i}" + ".dat"), "r") as configfile:
+                params = yaml.load(configfile, Loader=yaml.FullLoader)
+                matrix = params["energy_matrix"]
+                for j in range(len(matrix)):
+                    if max(matrix[j]) > higher:
+                        higher = max(matrix[j])
+                counter.append(higher)
+
+        temp = min(counter)
+        index = counter.index(temp)
+        error = QErrorMessage(self)
+        error.showMessage(
+            f"The best iteration with the least energy is in file loop_{index}!"
+        )
 
 
 if __name__ == "__main__":
