@@ -26,6 +26,7 @@ import re
 class Looper(QObject):
     finished = pyqtSignal()
     progression = pyqtSignal()
+    progress = pyqtSignal(int)
 
     def __init__(self, parent):
         QObject.__init__(self)
@@ -40,7 +41,9 @@ class Looper(QObject):
         time.sleep(1)
         self.progression.emit()
         time.sleep(1)
+        self.parent.automate = True
         self.finished.emit()
+        self.progress.emit(int((self.parent.file_counter / self.parent.iterator) * 100))
 
 
 class Worker(QObject):
@@ -60,7 +63,8 @@ class Worker(QObject):
             [None for strand1 in self.parent.strand] for strand2 in self.parent.strand
         ]
         for i, strand1 in enumerate(self.parent.strand):
-            self.progression.emit(int((i / len(self.parent.strand)) * 100))
+            if not self.parent.automate:
+                self.progression.emit(int((i / len(self.parent.strand)) * 100))
 
             for j, strand2 in enumerate(self.parent.strand):
                 mfold.run(strand1, strand2, f"{i}_{j}.seq", f"{i}_{j}.aux")
@@ -73,7 +77,8 @@ class Worker(QObject):
                 except FileNotFoundError:
                     self.parent.energy[i][j] = 0
 
-        self.progression.emit(100)
+        if not self.parent.automate:
+            self.progression.emit(100)
 
         self.progress.emit("DONE")
 
@@ -367,7 +372,7 @@ class DNA_origami(QWidget):
         self.btn8.setStyleSheet(
             "QPushButton {background-color: #007bff; color: white; border: 5px solid transparent; border-radius: 5px}"
         )
-        self.btn9 = QPushButton("Pre-optimize" + "\n" + " + " + "\n" + "Calculate")
+        self.btn9 = QPushButton("Calculate" + "\n" + " + " + "\n" + "Pre-optimize")
         self.btn9.setFixedSize(150, 70)
         self.btn9.setIconSize(QSize(30, 30))
         self.btn9.setStyleSheet(
@@ -713,7 +718,8 @@ class DNA_origami(QWidget):
                 self.worker.finished.connect(self.thread.wait)
                 self.thread.finished.connect(self.thread.deleteLater)
 
-                self.progress.setValue(1)
+                if self.file_counter == 0:
+                    self.progress.setValue(1)
                 self.progress.setTextVisible(True)
                 self.progress.setFormat("PROGRESSING")
 
@@ -954,6 +960,7 @@ class DNA_origami(QWidget):
                             error.showMessage(
                                 f"Please make sure to uncheck the field {self.header[i].lower()} to allow modifications"
                             )
+                            self.automate = False
                             break
 
                         else:
@@ -964,6 +971,7 @@ class DNA_origami(QWidget):
 
                 if counter == len(self.index):
                     self.highlighted.clear()
+                    self.automate = False
 
     def loop_calculation(self):
         if not self.automate:
@@ -973,12 +981,14 @@ class DNA_origami(QWidget):
                 "Iterations required",
                 "Please provide the number of iterations",
             )
+
         if self.automate:
             ok = True
-            text = self.iterator - 1
+            text = self.iterator - self.file_counter
             if text == 0:
                 ok = False
                 self.automate = False
+                self.progress.setValue(100)
             else:
                 try:
                     while not self.threader.isFinished():
@@ -986,7 +996,7 @@ class DNA_origami(QWidget):
                 except RuntimeError:
                     self.automate = False
                     self.loop_calculation()
-        
+
         if ok:
             if str(text) != "":
                 if int(text) < 0:
@@ -1001,9 +1011,10 @@ class DNA_origami(QWidget):
 
                 else:
                     if int(text) != 0:
+                        if self.file_counter == 0:
+                            self.iterator = int(text)
                         self.btn9.setEnabled(False)
                         self.btn8.setEnabled(False)
-                        self.iterator = int(text)
 
                         self.automate = True
                         self.threader = QThread()
@@ -1015,6 +1026,9 @@ class DNA_origami(QWidget):
 
                         self.looper.progression.connect(self.randomize_strand)
                         self.looper.progression.connect(self.loop_saver)
+                        self.looper.progress.connect(
+                            lambda x: self.progress.setValue(x)
+                        )
                         self.looper.finished.connect(self.threader.quit)
                         self.looper.finished.connect(self.looper.deleteLater)
                         self.looper.finished.connect(self.threader.wait)
@@ -1025,6 +1039,7 @@ class DNA_origami(QWidget):
             self.best_run()
             self.iterator = 0
             self.file_counter = 0
+            self.automate = False
             self.btn9.setEnabled(True)
             self.btn8.setEnabled(True)
 
