@@ -21,6 +21,10 @@ import re
 # able25 ABB36 abre25, ABRE25 abb36 ABLE25, acle25 ACB36 acre25, ACRE25 acb36 ACLE25, adle25 ADB36 adre25, ADRE25 adb36 ADLE25
 
 # To do:
+# matplotlib resolution image V
+# bug fixes
+# font size for axis V
+# editable highlight only
 
 
 class Looper(QObject):
@@ -166,6 +170,156 @@ def find_thief(self, mfold):
     self.parent.thief = df
 
 
+def intermediate_process(self):
+    temp = self.thief.transpose()
+    for a in range(len(temp["energy"])):
+        header = []
+        if temp["energy"][a] == temp["energy"].max():
+            end = temp["end"][a]
+            atindex = temp["index_app"][a]
+            if temp["end"][a] - 1 <= len(
+                self.strand[int(self.thief.columns[a][0])].bases
+            ):
+                strand1 = int(self.thief.columns[a][0])
+            else:
+                strand1 = int(self.thief.columns[a][1])
+                end = end - len(self.strand[int(self.thief.columns[a][0])].bases)
+                atindex = atindex - len(
+                    self.strand[int(self.thief.columns[a][0])].bases
+                )
+
+            for b in range(len(self.regions[strand1].split("--"))):
+                header.append(self.regions[strand1].split("--")[b])
+
+            data = gc_content([], self)
+            length = [len(data[header[_]]) for _ in range(len(header))]
+
+            for c in range(len(header)):
+                _ = 0
+                while header[c] != self.header[_]:
+                    _ += 1
+                self.index.append(_)
+
+            text = self.strand[strand1].bases
+
+            if atindex > end:
+                highlighted = str(f"{text[:atindex-1]}[{text[atindex-1:]}]")
+            if atindex == end:
+                highlighted = str(
+                    f"{text[:atindex-1]}[{text[atindex-1:end]}]{text[end:]}"
+                )
+            else:
+                highlighted = str(
+                    f"{text[:atindex-1]}[{text[atindex-1:end-1]}]{text[end-1:]}"
+                )
+
+            counter = 0
+            tools = []
+            flag = False
+
+            for counter in range(len(length)):
+                if flag:
+                    if "]" in highlighted[: length[counter] + 2]:
+                        tools.append(highlighted[: length[counter] + 2])
+                        highlighted = highlighted[length[counter] + 2 :]
+                        flag = False
+
+                    else:
+                        tools.append(highlighted[: length[counter] + 1])
+                        highlighted = highlighted[length[counter] + 1 :]
+
+                if "[" in highlighted[: length[counter] + 1]:
+                    extra = highlighted[: length[counter] + 1]
+                    if "]" in highlighted[: length[counter] + 2]:
+                        tools.append(highlighted[: length[counter] + 2])
+                        highlighted = highlighted[length[counter] + 2 :]
+                        flag = False
+
+                    if "[" == extra[-1]:
+                        tools.append(highlighted[: length[counter]])
+                        highlighted = highlighted[length[counter] :]
+                        flag = True
+
+                    else:
+                        tools.append(highlighted[: length[counter] + 1])
+                        highlighted = highlighted[length[counter] + 1 :]
+                        flag = True
+
+                else:
+                    tools.append(highlighted[: length[counter]])
+                    highlighted = highlighted[length[counter] :]
+
+            if highlighted == "]":
+                tools[-1] = tools[-1] + "]"
+            while tools[-1] == "":
+                tools.pop()
+
+            self.highlighted = self.highlighted + tools
+            tools = self.highlighted + tools
+
+            flag = False
+            flagger = False
+            counter = 0
+            for d in self.index:
+                tooltip = ""
+                if self.field[d].toolTip() != "" and self.index.count(d) > 1:
+                    text = self.field[d].toolTip()
+                    if flagger:
+                        tooltip = f"{text[:end-1]}]{text[end-1:]}"
+                    if end > len(text):
+                        tooltip = f"{text[: atindex - 1]}[{text[atindex - 1:]}"
+                        flagger = True
+                    else:
+                        tooltip = f"{text[: atindex - 1]}[{text[atindex - 1: end-1]}]{text[end-1:]}"
+
+                    if flag:
+                        if "]" in tooltip:
+                            self.field[d].setToolTip(tooltip)
+                            self.field[d].setStyleSheet("background-color:red")
+                            flag = False
+                        else:
+                            self.field[d].setToolTip(tooltip)
+                            self.field[d].setStyleSheet("background-color:red")
+
+                    if "[" in tooltip:
+                        if "]" in tooltip:
+                            self.field[d].setToolTip(tooltip)
+                            self.field[d].setStyleSheet("background-color:red")
+                            flag = False
+                        else:
+                            self.field[d].setToolTip(tooltip)
+                            self.field[d].setStyleSheet("background-color:red")
+                            flag = True
+                    break
+
+                else:
+                    if flag:
+                        if "]" in tools[counter]:
+                            self.field[d].setToolTip(tools[counter])
+                            self.field[d].setStyleSheet("background-color:red")
+                            flag = False
+                        else:
+                            self.field[d].setToolTip(tools[counter])
+                            self.field[d].setStyleSheet("background-color:red")
+
+                    if "[" in tools[counter]:
+                        if "]" in tools[counter]:
+                            self.field[d].setToolTip(tools[counter])
+                            self.field[d].setStyleSheet("background-color:red")
+                            flag = False
+                        else:
+                            self.field[d].setToolTip(tools[counter])
+                            self.field[d].setStyleSheet("background-color:red")
+                            flag = True
+                    counter += 1
+
+            for i in range(len(self.thief.columns)):
+                if self.thief.loc["energy"][i] == temp["energy"][a]:
+                    text = self.thief.columns.values.tolist()
+                    self.thief = self.thief.drop(labels=[text[i]], axis=1)
+                    break
+
+
 def gc_content(gc, self):
     gc.clear()
     gci = 0
@@ -184,7 +338,9 @@ def gc_content(gc, self):
         index += 1
 
     for i in range(len(temp)):
-        gci = int(temp[i].count("C")) + int(temp[i].count("G"))
+        for j in temp[i]:
+            if j == "C" or j == "G":
+                gci += 1
         gc.append(gci)
         gci = 0
 
@@ -383,7 +539,7 @@ class DNA_origami(QWidget):
         self.btn7.clicked.connect(self.output_data)
         self.btn8.clicked.connect(self.randomize_strand)
         self.btn9.clicked.connect(self.loop_calculation)
-        self.canvas = FigureCanvas(plt.Figure(figsize=(7, 7)))
+        self.canvas = FigureCanvas(plt.Figure(tight_layout=True, frameon=False))
         self.canvas.setFixedSize(500, 500)
         main_layout = QHBoxLayout()
 
@@ -453,12 +609,13 @@ class DNA_origami(QWidget):
                 self.regions.clear()
                 self.fixed_regions = {}
                 self.strand.clear()
+                self.energy.clear()
                 self.population_size.clear()
                 self.input_sequence = {}
 
                 try:
-                    render_form(self, text)
                     self.raw_structure = text
+                    render_form(self, text)
                 except KeyError:
                     error = QErrorMessage(self)
                     error.showMessage("Please follow the given structure format")
@@ -655,12 +812,14 @@ class DNA_origami(QWidget):
                 self.input_sequence = params["input_sequence_definitions"]
                 render_form(self, None)
                 self.update()
-
+        except yaml.parser.ParserError:
+            error = QErrorMessage(self)
+            error.showMessage("Please upload a file with .dat extension")
         except FileNotFoundError:
             pass
         except TypeError:
             error = QErrorMessage(self)
-            error.showMessage("Please respect the configuration file type")
+            error.showMessage("Please upload a file with .dat extension")
         except KeyError:
             error = QErrorMessage(self)
             error.showMessage("Please respect the configuration file format")
@@ -718,8 +877,6 @@ class DNA_origami(QWidget):
                 self.worker.finished.connect(self.thread.wait)
                 self.thread.finished.connect(self.thread.deleteLater)
 
-                if self.file_counter == 0:
-                    self.progress.setValue(1)
                 self.progress.setTextVisible(True)
                 self.progress.setFormat("PROGRESSING")
 
@@ -779,123 +936,11 @@ class DNA_origami(QWidget):
                         self.calculate()
 
     def highlight_thief(self):
-        header = []
-        temp = self.thief.transpose()
         self.highlighted.clear()
         self.index.clear()
+        for i in range(2):
+            intermediate_process(self)
 
-        for i in range(len(temp["energy"])):
-            header.clear()
-            if temp["energy"][i] == temp["energy"].max():
-                end = temp["end"][i]
-                atindex = temp["index_app"][i]
-                if temp["end"][i] - 1 <= len(
-                    self.strand[int(self.thief.columns[i][0])].bases
-                ):
-                    strand1 = int(self.thief.columns[i][0])
-                else:
-                    strand1 = int(self.thief.columns[i][1])
-                    end = end - len(self.strand[int(self.thief.columns[i][0])].bases)
-                    atindex = atindex - len(
-                        self.strand[int(self.thief.columns[i][0])].bases
-                    )
-
-                for j in range(len(self.regions[strand1].split("--"))):
-                    header.append(self.regions[strand1].split("--")[j])
-
-                data = gc_content([], self)
-                length = [len(data[header[_]]) for _ in range(len(header))]
-
-                for i in range(len(header)):
-                    _ = 0
-                    while header[i] != self.header[_]:
-                        _ += 1
-                    self.index.append(_)
-
-                text = self.strand[strand1].bases
-
-                if atindex > end:
-                    highlighted = str(f"{text[:atindex-1]}[{text[atindex-1:]}]")
-                if atindex == end:
-                    highlighted = str(
-                        f"{text[:atindex-1]}[{text[atindex-1:end]}]{text[end:]}"
-                    )
-                else:
-                    highlighted = str(
-                        f"{text[:atindex-1]}[{text[atindex-1:end-1]}]{text[end-1:]}"
-                    )
-
-                counter = 0
-                tools = []
-                flag = False
-                end = False
-                start = True
-                for counter in range(len(length)):
-                    if end:
-                        tools.append(highlighted[: length[counter] + 2])
-                        highlighted = highlighted[length[counter] + 2 :]
-                        flag = False
-
-                    if "]" in highlighted[: length[counter] + 2]:
-                        tools.append(highlighted[: length[counter] + 2])
-                        highlighted = highlighted[length[counter] + 2 :]
-                        flag = False
-                        end = True
-
-                    if flag:
-                        tools.append(highlighted[: length[counter] + 1])
-                        highlighted = highlighted[length[counter] + 1 :]
-
-                    if "[" in highlighted[: length[counter] + 1]:
-                        if "]" in highlighted[: length[counter] + 2]:
-                            tools.append(highlighted[: length[counter] + 2])
-                            highlighted = highlighted[length[counter] + 2 :]
-                            flag = False
-                            start = False
-                            end = True
-                        else:
-                            tools.append(highlighted[: length[counter] + 1])
-                            highlighted = highlighted[length[counter] + 1 :]
-                            flag = True
-                            start = False
-
-                    if start:
-                        tools.append(highlighted[: length[counter]])
-                        highlighted = highlighted[length[counter] :]
-
-                if highlighted == "]":
-                    tools[-1] = tools[-1] + "]"
-                while tools[-1] == "":
-                    tools.pop()
-
-                self.highlighted.append(tools)
-
-                counter = 0
-                for i in self.index:
-                    if flag:
-                        if "]" in tools[counter]:
-                            self.field[i].setToolTip(tools[counter])
-                            self.field[i].setStyleSheet("background-color:red")
-                            break
-                        else:
-                            self.field[i].setToolTip(tools[counter])
-                            self.field[i].setStyleSheet("background-color:red")
-                            counter += 1
-
-                    if "[" in tools[counter]:
-                        if "]" in tools[counter]:
-                            self.field[i].setToolTip(tools[counter])
-                            self.field[i].setStyleSheet("background-color:red")
-                            break
-                        else:
-                            self.field[i].setToolTip(tools[counter])
-                            self.field[i].setStyleSheet("background-color:red")
-                            flag = True
-                            counter += 1
-
-                    else:
-                        counter += 1
-                break
         self.btn3.setEnabled(True)
 
     def randomize_strand(self):
@@ -920,58 +965,189 @@ class DNA_origami(QWidget):
                 )
 
             else:
-                fields = []
-                for i in range(len(self.highlighted)):
-                    flag = False
-                    for j in range(len(self.highlighted[i])):
+                flager = True
+                flag = False
+                while flager:
+                    fields = []
+                    for i in range(len(self.highlighted)):
                         text = ""
 
-                        for k in range(len(self.highlighted[i][j])):
-                            if self.highlighted[i][j][k] == "]":
+                        for j in range(len(self.highlighted[i])):
+                            if self.highlighted[i][j] == "]":
                                 flag = False
 
                             elif flag:
-                                text += random.choice("GTCA")
+                                text += random.choice(["G", "T", "C", "A"])
 
-                            elif self.highlighted[i][j][k] == "[":
+                            elif self.highlighted[i][j] == "[":
                                 flag = True
 
                             else:
-                                text += self.highlighted[i][j][k]
+                                text += self.highlighted[i][j]
 
-                        if text != "":
-                            fields.append(text)
+                        fields.append(text)
 
-                counter = 0
-                for i in self.index:
+                    counter = len(self.highlighted) - 1
+                    while counter >= 0:
+                        if (
+                            "[" in self.highlighted[counter]
+                            or "]" in self.highlighted[counter]
+                        ):
+                            counter -= 1
+                            continue
+                        fields.pop(counter)
+                        self.index.pop(counter)
+                        self.highlighted.pop(counter)
+                        counter -= 1
+
                     gc = []
                     data = gc_content(gc, self)
-                    if gc[i] != int(fields[counter].count("G")) + int(
-                        fields[counter].count("C")
-                    ):
-                        flag = True
-                        self.automate = True
-                    if flag:
-                        self.randomize_strand()
-                        break
+                    gci = 0
+                    for _ in fields[0]:
+                        if _ == "C" or _ == "G":
+                            gci += 1
+                    if gc[self.index[0]] != gci:
+                        if "]" in self.highlighted[0]:
+                            if "[" in self.highlighted[0]:
+                                continue
+                            flag = True
+                        continue
+
                     else:
-                        if self.header[i] in self.fixed_regions.keys():
+                        if self.header[self.index[0]] in self.fixed_regions.keys():
                             error = QErrorMessage(self)
                             error.showMessage(
-                                f"Please make sure to uncheck the field {self.header[i].lower()} to allow modifications"
+                                f"Please make sure to uncheck the field {self.header[self.index[0]].lower()} to allow modifications"
                             )
-                            self.automate = False
                             break
 
-                        else:
-                            self.field[i].setText(fields[counter])
-                            self.field[i].setModified(True)
-                            counter += 1
-                            self.strand_update()
+                        if self.index.count(self.index[0]) > 1:
+                            indices = [
+                                i
+                                for i, x in enumerate(self.index)
+                                if x == self.index[0]
+                            ]
+                            indices.pop(0)
 
-                if counter == len(self.index):
-                    self.highlighted.clear()
-                    self.automate = False
+                            for i in indices:
+                                temp = self.highlighted[i]
+
+                                new_indices_o = [
+                                    j
+                                    for j in range(len(temp))
+                                    if temp.startswith("[", j)
+                                ]
+
+                                new_indices_c = [
+                                    j
+                                    for j in range(len(temp))
+                                    if temp.startswith("]", j)
+                                ]
+                                temp = [c for c in fields[0]]
+                                for k in new_indices_o:
+                                    temp.insert(k, "[")
+
+                                for l in new_indices_c:
+                                    temp.insert(l, "]")
+
+                                temp = "".join(temp)
+                                self.highlighted[i] = temp
+
+                        for i in range(len(self.header)):
+                            if self.header[self.index[0]].islower():
+                                if self.header[i] == self.header[self.index[0]].upper():
+                                    indices = [
+                                        j for j, x in enumerate(self.index) if x == i
+                                    ]
+                                    for k in indices:
+                                        temp = self.highlighted[k]
+                                        new_indices_o = [
+                                            j
+                                            for j in range(len(temp))
+                                            if temp.startswith("[", j)
+                                        ]
+
+                                        new_indices_c = [
+                                            j
+                                            for j in range(len(temp))
+                                            if temp.startswith("]", j)
+                                        ]
+                                        temp = (
+                                            fields[0][::-1]
+                                            .replace("A", "temp")
+                                            .replace("T", "A")
+                                            .replace("temp", "T")
+                                        )
+                                        temp = (
+                                            temp.replace("C", "temp")
+                                            .replace("G", "C")
+                                            .replace("temp", "G")
+                                        )
+                                        temp = [c for c in temp]
+                                        for l in new_indices_o:
+                                            temp.insert(l, "[")
+
+                                        for m in new_indices_c:
+                                            temp.insert(m, "]")
+
+                                        temp = "".join(temp)
+                                        self.highlighted[k] = temp
+
+                            if self.header[self.index[0]].isupper():
+                                if self.header[i] == self.header[self.index[0]].lower():
+                                    indices = [
+                                        j for j, x in enumerate(self.index) if x == i
+                                    ]
+                                    for k in indices:
+                                        temp = self.highlighted[k]
+
+                                        new_indices_o = [
+                                            j
+                                            for j in range(len(temp))
+                                            if temp.startswith("[", j)
+                                        ]
+
+                                        new_indices_c = [
+                                            j
+                                            for j in range(len(temp))
+                                            if temp.startswith("]", j)
+                                        ]
+                                        temp = (
+                                            fields[0][::-1]
+                                            .replace("A", "temp")
+                                            .replace("T", "A")
+                                            .replace("temp", "T")
+                                        )
+                                        temp = (
+                                            temp.replace("C", "temp")
+                                            .replace("G", "C")
+                                            .replace("temp", "G")
+                                        )
+                                        temp = [c for c in temp]
+                                        for l in new_indices_o:
+                                            temp.insert(l, "[")
+                                        for m in new_indices_c:
+                                            temp.insert(m, "]")
+
+                                        temp = "".join(temp)
+
+                                        self.highlighted[k] = temp
+
+                        self.field[self.index[0]].setText(fields[0])
+                        self.field[self.index[0]].setModified(True)
+                        self.strand_update()
+                        self.highlighted.pop(0)
+                        self.index.pop(0)
+                        try:
+                            if "]" in self.highlighted[0]:
+                                if "[" in self.highlighted[0]:
+                                    continue
+                                flag = True
+                        except IndexError:
+                            pass
+
+                        if self.index == []:
+                            break
 
     def loop_calculation(self):
         if not self.automate:
@@ -1050,7 +1226,7 @@ class DNA_origami(QWidget):
             "/bureau/dna-origami",
         )
         try:
-            self.canvas.print_png(filename[0])
+            self.canvas.print_figure(filename[0] + ".png", dpi=300)
         except FileNotFoundError:
             pass
 
@@ -1088,17 +1264,21 @@ class DNA_origami(QWidget):
                 im = ax.imshow(a, cmap="hot_r", interpolation="nearest", vmax=self.max)
                 ax.set_xticks(np.arange(len(ticks)))
                 ax.set_yticks(np.arange(len(ticks)))
-                ax.set_xticklabels(ticks, rotation=20, ha="right")
-                ax.set_yticklabels(ticks)
+                ax.set_xticklabels(
+                    ticks, fontsize=10, fontrotation=20, ha="right"
+                )
+                ax.set_yticklabels(ticks, fontsize=10)
                 ax.set_title("Energy Matrix for the different regions")
 
             else:
                 im = ax.imshow(a, cmap="hot_r", interpolation="nearest")
                 ax.set_xticks(np.arange(len(ticks)))
                 ax.set_yticks(np.arange(len(ticks)))
-                ax.set_xticklabels(ticks, rotation=20, ha="right", fontsize=8)
-                ax.set_yticklabels(ticks, fontsize=8)
-                ax.set_title("Energy Matrix for the different regions")
+                ax.set_xticklabels(
+                    ticks, fontsize=10, rotation=20, ha="right"
+                )
+                ax.set_yticklabels(ticks, fontsize=10)
+                ax.set_title("Energy Matrix for region interactions")
 
             cbar = ax.figure.colorbar(im, label="Kcal/mol", orientation="horizontal")
             self.canvas.draw()
