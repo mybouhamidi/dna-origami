@@ -22,9 +22,9 @@ import re
 
 # To do:
 # matplotlib resolution image V
-# bug fixes
-# font size for axis V
-# editable highlight only
+# bug fixes V
+# font size for axis V 
+# editable highlight only V
 
 
 class Looper(QObject):
@@ -177,6 +177,7 @@ def intermediate_process(self):
         if temp["energy"][a] == temp["energy"].max():
             end = temp["end"][a]
             atindex = temp["index_app"][a]
+
             if temp["end"][a] - 1 <= len(
                 self.strand[int(self.thief.columns[a][0])].bases
             ):
@@ -257,6 +258,41 @@ def intermediate_process(self):
             self.highlighted = self.highlighted + tools
             tools = self.highlighted + tools
 
+            counter = len(self.highlighted) - 1
+            while counter >= 0:
+                if "[" in self.highlighted[counter] or "]" in self.highlighted[counter]:
+                    counter -= 1
+                    continue
+                tools.pop(counter)
+                self.index.pop(counter)
+                self.highlighted.pop(counter)
+                counter -= 1
+
+            highlighted = self.highlighted
+            counter = 0
+            for d in self.index:
+                if self.header[d].isupper():
+                    highlighted[counter] = (
+                        highlighted[counter][::-1]
+                        .replace("C", "temp")
+                        .replace("G", "C")
+                        .replace("temp", "G")
+                        .replace("]", "temp")
+                        .replace("[", "]")
+                        .replace("temp", "[")
+                    )
+                    highlighted[counter] = (
+                        highlighted[counter]
+                        .replace("A", "temp")
+                        .replace("T", "A")
+                        .replace("temp", "T")
+                    )
+                    for _ in range(len(self.header)):
+                        if self.header[_] == self.header[d].lower():
+                            break
+                    self.index[counter] = _
+                counter += 1
+
             flag = False
             flagger = False
             counter = 0
@@ -269,6 +305,14 @@ def intermediate_process(self):
                     if end > len(text):
                         tooltip = f"{text[: atindex - 1]}[{text[atindex - 1:]}"
                         flagger = True
+                    if atindex > len(text):
+                        if "[" in text and "]" in text:
+                            atindex = atindex - len(text) + 4
+                            end = end - len(text) + 4
+                        else:
+                            atindex = atindex - len(text) + 2
+                            end = end - len(text) + 2
+                        tooltip = f"{text[:atindex -1]}[{text[atindex-1:end-1]}]{text[end-1:]}"
                     else:
                         tooltip = f"{text[: atindex - 1]}[{text[atindex - 1: end-1]}]{text[end-1:]}"
 
@@ -295,20 +339,20 @@ def intermediate_process(self):
                 else:
                     if flag:
                         if "]" in tools[counter]:
-                            self.field[d].setToolTip(tools[counter])
+                            self.field[d].setToolTip(highlighted[counter])
                             self.field[d].setStyleSheet("background-color:red")
                             flag = False
                         else:
-                            self.field[d].setToolTip(tools[counter])
+                            self.field[d].setToolTip(highlighted[counter])
                             self.field[d].setStyleSheet("background-color:red")
 
                     if "[" in tools[counter]:
                         if "]" in tools[counter]:
-                            self.field[d].setToolTip(tools[counter])
+                            self.field[d].setToolTip(highlighted[counter])
                             self.field[d].setStyleSheet("background-color:red")
                             flag = False
                         else:
-                            self.field[d].setToolTip(tools[counter])
+                            self.field[d].setToolTip(highlighted[counter])
                             self.field[d].setStyleSheet("background-color:red")
                             flag = True
                     counter += 1
@@ -940,7 +984,6 @@ class DNA_origami(QWidget):
         self.index.clear()
         for i in range(2):
             intermediate_process(self)
-
         self.btn3.setEnabled(True)
 
     def randomize_strand(self):
@@ -987,18 +1030,18 @@ class DNA_origami(QWidget):
 
                         fields.append(text)
 
-                    counter = len(self.highlighted) - 1
-                    while counter >= 0:
-                        if (
-                            "[" in self.highlighted[counter]
-                            or "]" in self.highlighted[counter]
-                        ):
-                            counter -= 1
-                            continue
-                        fields.pop(counter)
-                        self.index.pop(counter)
-                        self.highlighted.pop(counter)
-                        counter -= 1
+                    # counter = len(self.highlighted) - 1
+                    # while counter >= 0:
+                    #     if (
+                    #         "[" in self.highlighted[counter]
+                    #         or "]" in self.highlighted[counter]
+                    #     ):
+                    #         counter -= 1
+                    #         continue
+                    #     fields.pop(counter)
+                    #     self.index.pop(counter)
+                    #     self.highlighted.pop(counter)
+                    #     counter -= 1
 
                     gc = []
                     data = gc_content(gc, self)
@@ -1133,6 +1176,8 @@ class DNA_origami(QWidget):
 
                                         self.highlighted[k] = temp
 
+                        # print(fields)
+                        # print(self.highlighted)
                         self.field[self.index[0]].setText(fields[0])
                         self.field[self.index[0]].setModified(True)
                         self.strand_update()
@@ -1264,9 +1309,7 @@ class DNA_origami(QWidget):
                 im = ax.imshow(a, cmap="hot_r", interpolation="nearest", vmax=self.max)
                 ax.set_xticks(np.arange(len(ticks)))
                 ax.set_yticks(np.arange(len(ticks)))
-                ax.set_xticklabels(
-                    ticks, fontsize=10, fontrotation=20, ha="right"
-                )
+                ax.set_xticklabels(ticks, fontsize=10, fontrotation=20, ha="right")
                 ax.set_yticklabels(ticks, fontsize=10)
                 ax.set_title("Energy Matrix for the different regions")
 
@@ -1274,9 +1317,7 @@ class DNA_origami(QWidget):
                 im = ax.imshow(a, cmap="hot_r", interpolation="nearest")
                 ax.set_xticks(np.arange(len(ticks)))
                 ax.set_yticks(np.arange(len(ticks)))
-                ax.set_xticklabels(
-                    ticks, fontsize=10, rotation=20, ha="right"
-                )
+                ax.set_xticklabels(ticks, fontsize=10, rotation=20, ha="right")
                 ax.set_yticklabels(ticks, fontsize=10)
                 ax.set_title("Energy Matrix for region interactions")
 
