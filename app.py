@@ -7,6 +7,7 @@ from PyQt5.QtGui import *
 
 # Import matplotlib for heatmap rendering
 import matplotlib
+import networkx as nx
 
 matplotlib.use("QT5Agg")
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
@@ -24,15 +25,17 @@ from genetic import Sequence
 # able25 ABB36 abre25, ABRE25 abb36 ABLE25, acle25 ACB36 acre25, ACRE25 acb36 ACLE25, adle25 ADB36 adre25, ADRE25 adb36 ADLE25
 
 # To do:
-# output the 2D shape of the input given
+# output the 2D shape of the input given ~V
 # test drive the preoptimize and reject if energy is higher ~V
 # calculate after preoptimize (one try case) V
-# fix the progress bar update in the loop calculation
+# fix the progress bar update in the loop calculation V
 
 
 class Randomizer(QObject):
     render = pyqtSignal()
+    enable = pyqtSignal(bool)
     done = pyqtSignal()
+    error = pyqtSignal()
     progress = pyqtSignal(str)
     trials = 0
 
@@ -41,7 +44,6 @@ class Randomizer(QObject):
         self.parent = parent
 
     def run_randomization(self):
-        self.parent.btn9.setEnabled(False)
         flag = False
         counter = 0
         self.progress.emit("Randomizing")
@@ -258,8 +260,8 @@ class Randomizer(QObject):
 
         new = higher
 
-        print(self.trials, "trials")
-        print(max, new)
+        # print(self.trials, "trials")
+        # print(max, new)
         if new > max and self.trials < 5:
             while self.parent.center_layout.count() != 0:
                 self.parent.center_layout.removeRow(0)
@@ -279,7 +281,8 @@ class Randomizer(QObject):
             self.render.emit()
             time.sleep(0.4)
 
-            print("here, 1")
+            # print("here, 1")
+            self.parent.automate = True
             self.parent.calculate()
             while not self.parent.btn3.isEnabled():
                 _ = 0
@@ -288,6 +291,7 @@ class Randomizer(QObject):
             self.run_randomization()
 
         else:
+            flag = False
             if new > max:
                 while self.parent.center_layout.count() != 0:
                     self.parent.center_layout.removeRow(0)
@@ -305,10 +309,13 @@ class Randomizer(QObject):
                     self.parent.input_sequence = params["input_sequence_definitions"]
 
                 self.render.emit()
+                flag = True
 
-            # time.sleep(0.4)
-
-            print("here, 2")
+            time.sleep(0.4)
+            self.parent.highlighted.clear()
+            self.parent.index.clear()
+            # print("here, 2")
+            self.parent.automate = False
             self.parent.calculate()
             while not self.parent.btn3.isEnabled():
                 _ = 0
@@ -320,12 +327,11 @@ class Randomizer(QObject):
             for item in test:
                 if item.endswith("temp.dat"):
                     os.remove(os.path.join(cwd, item))
+
+            if flag:
+                self.error.emit()
             self.progress.emit("Done")
-            # self.parent.highlighted.clear()
-            # self.parent.index.clear()
-            self.parent.btn8.setEnabled(True)
-            self.parent.btn3.setEnabled(True)
-            self.parent.btn9.setEnabled(True)
+            self.enable.emit(True)
             self.done.emit()
 
 
@@ -343,7 +349,8 @@ class Looper(QObject):
     """
 
     finished = pyqtSignal()
-    progression = pyqtSignal()
+    enable = pyqtSignal(bool)
+    progression = pyqtSignal(str)
     progress = pyqtSignal(int)
 
     def __init__(self, parent):
@@ -360,32 +367,36 @@ class Looper(QObject):
                 self.progress :
                 self.finished :
         """
-        self.parent.calculate()
-        while not self.parent.btn3.isEnabled():
-            _ = 0
 
         self.parent.automate = True
-        # time.sleep(1)
-        self.parent.randomize_strand()
-        while not self.parent.btn8.isEnabled():
+        self.parent.calculate()
+        while not self.parent.btn3.isEnabled():
+            self.progression.emit("Calculating")
             _ = 0
 
-        # time.sleep(1)
-        # print("MOK")
-        # print(self.parent.file_counter)
+        time.sleep(0.4)
+        # self.parent.automate = True
 
-        # self.parent.iterator = self.parent.iterator - self.parent.file_counter
-        self.progress.emit(int((self.parent.file_counter / self.parent.iterator) * 100))
+        self.parent.randomize_strand()
+        while not self.parent.btn8.isEnabled():
+            self.progression.emit("Randomizing")
+            _ = 0
+
+        time.sleep(0.4)
+        print("here", self.parent.file_counter, self.parent.iterator)
+        self.progression.emit("Progressing")
+
         self.parent.file_counter += 1
+        self.progress.emit(int((self.parent.file_counter / self.parent.iterator) * 100))
         if self.parent.file_counter == self.parent.iterator:
             self.parent.automate = False
             self.progress.emit(100)
             self.parent.file_counter = 0
             self.parent.iterator = 0
-            self.parent.btn9.setEnabled(True)
-            self.parent.btn8.setEnabled(True)
+            self.enable.emit(True)
             self.finished.emit()
-        self.run_routine()
+        else:
+            self.run_routine()
 
 
 class Worker(QObject):
@@ -441,10 +452,11 @@ class Worker(QObject):
         if not self.parent.automate:
             self.progression.emit(100)
 
-        self.progress.emit("DONE")
+        self.progress.emit("Generating structures")
 
         find_thief(self)
         mfold.clean_all()
+        self.progress.emit("DONE")
         self.finished.emit()
 
 
@@ -498,10 +510,10 @@ def find_thief(self):
                                         _ += line
                             if line.startswith(" dG"):
                                 flagger = True
+
                     with open(f"{i}_{j}.ct", "r") as configfile:
                         counter = 0
                         max = 0
-
                         for line in configfile:
                             try:
                                 if flag and int(line[25:30]) == 0:
@@ -543,7 +555,93 @@ def find_thief(self):
                         data[f"{i}{j}"]["index_app"] = index
                         data[f"{i}{j}"]["index_ct"] = index1
                         data[f"{i}{j}"]["end"] = end
-                        data[f"{i}{j}"]["shape"] = _
+
+                    nodes_list = []
+                    edges_list = []
+                    with open(f"{i}_{j}.ct", "r") as configfile:
+                        text = ""
+                        counter = 0
+                        before = 0
+                        after = 0
+                        center = 0
+                        extra = 0
+                        for line in configfile:
+                            if line[7:8] == "d":
+                                exit = int(line[3:6])
+                                continue
+
+                            if line[7:8] == "L":
+                                continue
+
+                            if counter < len(self.parent.strand[i].bases):
+                                before = int(line[12:15])
+                                after = int(line[20:22])
+                                center = int(line[3:6])
+                                nodes_list.append(before)
+                                edges_list.append((before, center))
+                                edges_list.append((center, after))
+                                if int(line[27:30]) != 0:
+                                    if int(line[27:30]) > len(
+                                        self.parent.strand[i].bases
+                                    ):
+                                        extra = int(line[27:30]) - 4
+                                    else:
+                                        extra = int(line[27:30])
+                                    edges_list.append((before, extra))
+                                counter += 1
+
+                            else:
+                                before = int(line[12:15]) - 3
+                                after = int(line[20:22]) - 3
+                                if exit == int(line[3:6]):
+                                    if line[7:8] == "d":
+                                        nodes_list.append(before)
+                                        edges_list.append((nodes_list[-1], 0))
+                                        break
+                                    else:
+                                        nodes_list.append(before)
+                                        edges_list.append((nodes_list[-1], 0))
+                                        break
+                                center = int(line[3:6]) - 3
+                                nodes_list.append(before)
+                                edges_list.append((before, center))
+                                if int(line[27:30]) != 0:
+                                    extra = int(line[27:30]) - 1
+                                    edges_list.append((before, extra))
+                                counter += 1
+
+                    text = self.parent.strand[i].bases + self.parent.strand[j].bases
+                    G = nx.DiGraph()
+
+                    labels = {}
+                    for _ in range(len(text)):
+                        G.add_node(nodes_list[_], weight=text[_])
+                        labels[_] = G.nodes[_]["weight"]
+
+                    G.add_edges_from(edges_list)
+
+                    options = {
+                        "edgecolors": "black",
+                        "linewidths": 0.5,
+                        "node_color": "white",
+                        "width": 0.5,
+                        "arrowsize": 1,
+                        "node_size": 80,
+                        "font_size": 6,
+                    }
+
+                    nx.draw_kamada_kawai(
+                        G,
+                        with_labels=True,
+                        labels=labels,
+                        **options,
+                    )
+
+                    plt.savefig(f"{i}_{j}.png", dpi=300)
+                    plt.clf()
+
+                    data[f"{i}{j}"]["shape"] = f"{i}_{j}.png"
+
                 except FileNotFoundError:
                     data[f"{i}{j}"]["energy"] = 0
                     data[f"{i}{j}"]["letter"] = None
@@ -686,279 +784,12 @@ def intermediate_process(self):
                 else:
                     counter -= 1
 
-            # highlighted = []
-            # highlighted += self.highlighted
-            # counter = 0
-            # index = []
-            # index += self.index
-            # print(highlighted, index, "before")
-            # for d in index:
-            #     if self.header[d].isupper():
-            #         highlighted[counter] = (
-            #             highlighted[counter][::-1]
-            #             .replace("C", "temp")
-            #             .replace("G", "C")
-            #             .replace("temp", "G")
-            #         )
-            #         highlighted[counter] = (
-            #             highlighted[counter]
-            #             .replace("]", "temp")
-            #             .replace("[", "]")
-            #             .replace("temp", "[")
-            #         )
-            #         highlighted[counter] = (
-            #             highlighted[counter]
-            #             .replace("A", "temp")
-            #             .replace("T", "A")
-            #             .replace("temp", "T")
-            #         )
-            #         try:
-            #             atindex = highlighted[counter].index("[") - 1
-            #         except ValueError:
-            #             pass
-
-            #         try:
-            #             end = highlighted[counter].index("]") - 2
-            #         except ValueError:
-            #             pass
-
-            #         for _ in range(len(self.header)):
-            #             if self.header[_] == self.header[d].lower():
-            #                 break
-            #         index[counter] = _
-            #     counter += 1
-
-            # print(highlighted, index, "after")
-            # flag = False
-            # counter = 0
-            # # print(self.highlighted, self.index)
-            # for d in index:
-            #     # tooltip = ""
-            #     # print("here", self.field[d].toolTip(), d)
-            #     if self.field[d].toolTip() != "" and index.count(d) > 1:
-            #         text = self.field[d].toolTip()
-            #         self.field[d].setToolTip("")
-            #         #     if flagger:
-            #         #         tooltip = f"{text[:end-1]}]{text[end-1:]}"
-            #         #     if end > len(text):
-            #         #         tooltip = f"{text[: atindex - 1]}[{text[atindex - 1:]}"
-            #         #         flagger = True
-            #         #     if atindex > len(text):
-            #         #         if "[" in text and "]" in text:
-            #         #             atindex = atindex - len(text) + 4
-            #         #             end = end - len(text) + 4
-            #         #         else:
-            #         #             atindex = atindex - len(text) + 2
-            #         #             end = end - len(text) + 2
-            #         #         tooltip = f"{text[:atindex -1]}[{text[atindex-1:end-1]}]{text[end-1:]}"
-            #         #     else:
-            #         #         tooltip = f"{text[: atindex +1]}[{text[atindex +1: end+1]}]{text[end+1:]}"
-
-            #         if flag:
-            #             if "]" in highlighted[counter]:
-            #                 self.field[d].setToolTip(
-            #                     text
-            #                     + "\n"
-            #                     + highlighted[counter]
-            #                     + "\n"
-            #                     + str(temp["shape"][a])
-            #                     + "\n"
-            #                 )
-            #                 self.field[d].setStyleSheet("background-color:red")
-            #                 flag = False
-            #             else:
-            #                 self.field[d].setToolTip(
-            #                     text
-            #                     + "\n"
-            #                     + highlighted[counter]
-            #                     + "\n"
-            #                     + str(temp["shape"][a])
-            #                     + "\n"
-            #                 )
-            #                 self.field[d].setStyleSheet("background-color:red")
-            #             # break
-            #         if "[" in highlighted[counter]:
-            #             if "]" in highlighted[counter]:
-            #                 self.field[d].setToolTip(
-            #                     text
-            #                     + "\n"
-            #                     + highlighted[counter]
-            #                     + "\n"
-            #                     + str(temp["shape"][a])
-            #                     + "\n"
-            #                 )
-            #                 self.field[d].setStyleSheet("background-color:red")
-            #                 flag = False
-            #             else:
-            #                 self.field[d].setToolTip(
-            #                     text
-            #                     + "\n"
-            #                     + highlighted[counter]
-            #                     + "\n"
-            #                     + str(temp["shape"][a])
-            #                     + "\n"
-            #                 )
-            #                 self.field[d].setStyleSheet("background-color:red")
-            #                 flag = True
-            #         break
-            #     else:
-            #         if flag:
-            #             if "]" in highlighted[counter]:
-            #                 self.field[d].setToolTip(
-            #                     highlighted[counter]
-            #                     + "\n"
-            #                     + str(temp["shape"][a])
-            #                     + "\n"
-            #                 )
-            #                 self.field[d].setStyleSheet("background-color:red")
-            #                 flag = False
-            #             else:
-            #                 self.field[d].setToolTip(
-            #                     highlighted[counter]
-            #                     + "\n"
-            #                     + str(temp["shape"][a])
-            #                     + "\n"
-            #                 )
-            #                 self.field[d].setStyleSheet("background-color:red")
-
-            #         if "[" in highlighted[counter]:
-            #             if "]" in highlighted[counter]:
-            #                 self.field[d].setToolTip(
-            #                     highlighted[counter]
-            #                     + "\n"
-            #                     + str(temp["shape"][a])
-            #                     + "\n"
-            #                 )
-            #                 self.field[d].setStyleSheet("background-color:red")
-            #                 flag = False
-            #             else:
-            #                 self.field[d].setToolTip(
-            #                     highlighted[counter]
-            #                     + "\n"
-            #                     + str(temp["shape"][a])
-            #                     + "\n"
-            #                 )
-            #                 self.field[d].setStyleSheet("background-color:red")
-            #                 flag = True
-            #     counter += 1
-
-            # print(temp["shape"][a])
-            # if str(temp["shape"][a])
-            self.shape.append(str(temp["shape"][a]))
-            # text = temp.index.values.tolist()
-            # temp = temp.drop(index=text[a], axis=1)
-            # break
-
-            # print(temp)
             for i in range(len(self.thief.columns)):
                 if self.thief.loc["energy"][i] == temp["energy"][a]:
+                    self.shape.append(temp["shape"][a])
                     text = self.thief.columns.values.tolist()
-                    # print(self.thief[text[i]])
                     self.thief = self.thief.drop(labels=[text[i]], axis=1)
                     break
-            # continue
-        # print(a)
-
-    # print("mok", len(highlighted), len(self.shape))
-    # flag = False
-    # counter = 0
-    # for d in index:
-    #     # tooltip = ""
-    #     # print("here", self.field[d].toolTip(), d)
-    #     if self.field[d].toolTip() != "":
-    #         text = self.field[d].toolTip()
-    #         self.field[d].setToolTip("")
-    #         #     if flagger:
-    #         #         tooltip = f"{text[:end-1]}]{text[end-1:]}"
-    #         #     if end > len(text):
-    #         #         tooltip = f"{text[: atindex - 1]}[{text[atindex - 1:]}"
-    #         #         flagger = True
-    #         #     if atindex > len(text):
-    #         #         if "[" in text and "]" in text:
-    #         #             atindex = atindex - len(text) + 4
-    #         #             end = end - len(text) + 4
-    #         #         else:
-    #         #             atindex = atindex - len(text) + 2
-    #         #             end = end - len(text) + 2
-    #         #         tooltip = f"{text[:atindex -1]}[{text[atindex-1:end-1]}]{text[end-1:]}"
-    #         #     else:
-    #         #         tooltip = f"{text[: atindex +1]}[{text[atindex +1: end+1]}]{text[end+1:]}"
-
-    #         if flag:
-    #             if "]" in highlighted[counter]:
-    #                 self.field[d].setToolTip(
-    #                     text
-    #                     + "\n"
-    #                     + highlighted[counter]
-    #                     + "\n"
-    #                     + self.shape[counter]
-    #                     + "\n"
-    #                 )
-    #                 self.field[d].setStyleSheet("background-color:red")
-    #                 flag = False
-    #             else:
-    #                 self.field[d].setToolTip(
-    #                     text
-    #                     + "\n"
-    #                     + highlighted[counter]
-    #                     + "\n"
-    #                     + self.shape[counter]
-    #                     + "\n"
-    #                 )
-    #                 self.field[d].setStyleSheet("background-color:red")
-    #         if "[" in highlighted[counter]:
-    #             if "]" in highlighted[counter]:
-    #                 self.field[d].setToolTip(
-    #                     text
-    #                     + "\n"
-    #                     + highlighted[counter]
-    #                     + "\n"
-    #                     + self.shape[counter]
-    #                     + "\n"
-    #                 )
-    #                 self.field[d].setStyleSheet("background-color:red")
-    #                 flag = False
-    #             else:
-    #                 self.field[d].setToolTip(
-    #                     text
-    #                     + "\n"
-    #                     + highlighted[counter]
-    #                     + "\n"
-    #                     + self.shape[counter]
-    #                     + "\n"
-    #                 )
-    #                 self.field[d].setStyleSheet("background-color:red")
-    #                 flag = True
-    #         # break
-
-    #     else:
-    #         if flag:
-    #             if "]" in highlighted[counter]:
-    #                 self.field[d].setToolTip(
-    #                     highlighted[counter] + "\n" + self.shape[counter] + "\n"
-    #                 )
-    #                 self.field[d].setStyleSheet("background-color:red")
-    #                 flag = False
-    #             else:
-    #                 self.field[d].setToolTip(
-    #                     highlighted[counter] + "\n" + self.shape[counter] + "\n"
-    #                 )
-    #                 self.field[d].setStyleSheet("background-color:red")
-
-    #         if "[" in highlighted[counter]:
-    #             if "]" in highlighted[counter]:
-    #                 self.field[d].setToolTip(
-    #                     highlighted[counter] + "\n" + self.shape[counter] + "\n"
-    #                 )
-    #                 self.field[d].setStyleSheet("background-color:red")
-    #                 flag = False
-    #             else:
-    #                 self.field[d].setToolTip(
-    #                     highlighted[counter] + "\n" + self.shape[counter] + "\n"
-    #                 )
-    #                 self.field[d].setStyleSheet("background-color:red")
-    #                 flag = True
-    #     counter += 1
 
 
 def gc_content(gc, self):
@@ -1102,8 +933,32 @@ class DNA_origami(QWidget):
         self.btn7.clicked.connect(self.output_data)
         self.btn8.clicked.connect(self.randomize_strand)
         self.btn9.clicked.connect(self.loop_calculation)
+        self.tabs = QTabWidget()
+        self.tabs.setFixedSize(500, 500)
+
         self.canvas = FigureCanvas(plt.Figure(tight_layout=True, frameon=False))
-        self.canvas.setFixedSize(500, 500)
+        self.canvas.setFixedSize(480, 450)
+        self.tab1 = QWidget()
+        self.tab2 = QWidget()
+        self.tabs.addTab(self.tab1, "Energy")
+        self.tabs.addTab(self.tab2, "Structure")
+
+        self.tab1.layout = QVBoxLayout()
+        self.tab1.layout.addWidget(self.canvas)
+        self.tab1.setLayout(self.tab1.layout)
+
+        self.tab2.layout = QVBoxLayout()
+        self.tab2_secondary = QFormLayout()
+        self.scroll = QScrollArea()
+        self.scroll.setStyleSheet("border: none; background-color: white")
+        self.mygroup = QGroupBox()
+        self.mygroup.setStyleSheet("border: none; background-color: white")
+        self.mygroup.setLayout(self.tab2_secondary)
+        self.scroll.setWidget(self.mygroup)
+        self.scroll.setWidgetResizable(True)
+        self.tab2.layout.addWidget(self.scroll)
+        self.tab2.setLayout(self.tab2.layout)
+
         main_layout = QHBoxLayout()
 
         temp_top = QHBoxLayout()
@@ -1127,18 +982,19 @@ class DNA_origami(QWidget):
         self.bottom_layout.addWidget(self.btn4)
         self.bottom_layout.addWidget(self.btn5)
         self.left_side.addLayout(self.top_layout)
-        self.scroll = QScrollArea()
-        self.scroll.setStyleSheet("border: none")
-        self.mygroup = QGroupBox()
-        self.mygroup.setStyleSheet("border: none")
-        self.mygroup.setLayout(self.center_layout)
-        self.scroll.setWidget(self.mygroup)
-        self.scroll.setWidgetResizable(True)
-        self.left_side.addWidget(self.scroll)
+
+        self.scroll_1 = QScrollArea()
+        self.scroll_1.setStyleSheet("border: none")
+        self.mygroup_1 = QGroupBox()
+        self.mygroup_1.setStyleSheet("border: none")
+        self.mygroup_1.setLayout(self.center_layout)
+        self.scroll_1.setWidget(self.mygroup_1)
+        self.scroll_1.setWidgetResizable(True)
+        self.left_side.addWidget(self.scroll_1)
         self.left_side.addLayout(self.bottom_layout)
 
         self.right_side.addLayout(temp_top)
-        self.right_side.addWidget(self.canvas)
+        self.right_side.addWidget(self.tabs)
         self.progress = QProgressBar()
         self.progress.setAlignment(Qt.AlignHCenter)
         self.progress.setFixedSize(350, 30)
@@ -1589,7 +1445,6 @@ class DNA_origami(QWidget):
         """
         self.btn3.setEnabled(False)
         flag_range = False
-        flag_empty = False
         index = 0
 
         gc = []
@@ -1606,14 +1461,11 @@ class DNA_origami(QWidget):
                 break
 
         if self.strand == []:
-            flag_empty = True
-
-        if flag_empty:
             error = QErrorMessage(self)
             error.showMessage("Please provide a structure")
             self.btn3.setEnabled(True)
 
-        if self.header[index] in self.fixed_regions.keys():
+        elif self.header[index] in self.fixed_regions.keys():
             error = QErrorMessage(self)
             error.showMessage(
                 f"Please make sure to uncheck the field {self.header[index].lower()} to allow modifications"
@@ -1707,15 +1559,56 @@ class DNA_origami(QWidget):
         """
         self.highlighted.clear()
         self.index.clear()
+        self.shape.clear()
         for i in range(2):
             intermediate_process(self)
+
+        while self.tab2_secondary.count() != 0:
+            self.tab2_secondary.removeRow(0)
+
+        if not self.automate:
+            counter = 0
+            for e in self.shape:
+                if (
+                    "[" in self.highlighted[counter]
+                    and "]" in self.highlighted[counter]
+                ):
+                    labelImage = QLabel(self.highlighted[counter])
+                    pixmap = QPixmap(e)
+                    pixmap = pixmap.scaled(1000, 1000)
+                    labelImage.setPixmap(pixmap)
+                    self.tab2_secondary.addWidget(QLabel(self.highlighted[counter]))
+                    self.tab2_secondary.addWidget(labelImage)
+                    counter += 1
+                else:
+                    labelImage = QLabel(self.highlighted[counter])
+                    pixmap = QPixmap(e)
+                    pixmap = pixmap.scaled(1000, 1000)
+                    labelImage.setPixmap(pixmap)
+                    # print("before", self.highlighted[counter])
+                    while not "]" in self.highlighted[counter]:
+                        # print("during", self.highlighted[counter])
+                        self.tab2_secondary.addWidget(QLabel(self.highlighted[counter]))
+                        counter += 1
+                    # print("after", self.highlighted[counter])
+                    self.tab2_secondary.addWidget(QLabel(self.highlighted[counter]))
+                    self.tab2_secondary.addWidget(labelImage)
+                    counter += 1
+
+        cwd = os.getcwd()
+        test = os.listdir(cwd)
+        for i in range(len(self.strand)):
+            for j in range(len(self.strand)):
+                for item in test:
+                    if item.endswith(f"{i}_{j}.png"):
+                        if not item in self.shape:
+                            os.remove(os.path.join(cwd, item))
 
         highlighted = []
         highlighted = self.highlighted
         counter = 0
         index = []
         index = self.index
-        # print(highlighted, index, "before")
         for d in index:
             if self.header[d].isupper():
                 highlighted[counter] = (
@@ -1743,10 +1636,8 @@ class DNA_origami(QWidget):
                 index[counter] = _
             counter += 1
 
-        # print(highlighted, index, "after")
         flag = False
         counter = 0
-        # print(self.highlighted, self.index)
         for d in index:
             if counter > len(index):
                 break
@@ -1756,71 +1647,51 @@ class DNA_origami(QWidget):
                 if flag:
                     if "]" in highlighted[counter]:
                         self.field[d].setToolTip(
-                            text
-                            + "\n"
-                            + highlighted[counter]
-                            + "\n"
-                            + self.shape[counter]
+                            text + "\n" + highlighted[counter] + "\n"
                         )
                         self.field[d].setStyleSheet("background-color:red")
                         flag = False
                     else:
                         self.field[d].setToolTip(
-                            text
-                            + "\n"
-                            + highlighted[counter]
-                            + "\n"
-                            + self.shape[counter]
+                            text + "\n" + highlighted[counter] + "\n"
                         )
                         self.field[d].setStyleSheet("background-color:red")
 
                 if "[" in highlighted[counter]:
                     if "]" in highlighted[counter]:
                         self.field[d].setToolTip(
-                            text
-                            + "\n"
-                            + highlighted[counter]
-                            + "\n"
-                            + self.shape[counter]
+                            text + "\n" + highlighted[counter] + "\n"
                         )
+
                         self.field[d].setStyleSheet("background-color:red")
                         flag = False
                     else:
                         self.field[d].setToolTip(
-                            text
-                            + "\n"
-                            + highlighted[counter]
-                            + "\n"
-                            + self.shape[counter]
+                            text + "\n" + highlighted[counter] + "\n"
                         )
+
                         self.field[d].setStyleSheet("background-color:red")
                         flag = True
 
             else:
                 if flag:
                     if "]" in highlighted[counter]:
-                        self.field[d].setToolTip(
-                            highlighted[counter] + "\n" + self.shape[counter]
-                        )
+                        self.field[d].setToolTip(highlighted[counter] + "\n")
+
                         self.field[d].setStyleSheet("background-color:red")
                         flag = False
                     else:
-                        self.field[d].setToolTip(
-                            highlighted[counter] + "\n" + self.shape[counter]
-                        )
+                        self.field[d].setToolTip(highlighted[counter] + "\n")
                         self.field[d].setStyleSheet("background-color:red")
 
                 if "[" in highlighted[counter]:
                     if "]" in highlighted[counter]:
-                        self.field[d].setToolTip(
-                            highlighted[counter] + "\n" + self.shape[counter]
-                        )
+                        self.field[d].setToolTip(highlighted[counter] + "\n")
+
                         self.field[d].setStyleSheet("background-color:red")
                         flag = False
                     else:
-                        self.field[d].setToolTip(
-                            highlighted[counter] + "\n" + self.shape[counter]
-                        )
+                        self.field[d].setToolTip(highlighted[counter] + "\n")
                         self.field[d].setStyleSheet("background-color:red")
                         flag = True
             counter += 1
@@ -1885,10 +1756,22 @@ class DNA_origami(QWidget):
                 self.work.render.connect(self.render_form)
                 self.work.render.connect(self.update)
                 self.work.progress.connect(lambda x: self.progress.setFormat(x))
+                self.work.enable.connect(self.enable_button)
+                self.work.error.connect(self.failed_randomization)
                 self.work.done.connect(self.threading.quit)
                 self.work.done.connect(self.work.deleteLater)
                 self.work.done.connect(self.threading.wait)
                 self.threading.finished.connect(self.threading.deleteLater)
+
+    def enable_button(self):
+        self.btn8.setEnabled(True)
+
+    def failed_randomization(self):
+        if self.btn9.isEnabled():
+            error = QErrorMessage(self)
+            error.showMessage(
+                "Randomization failed, please run the randomization once again"
+            )
 
     def loop_calculation(self):
         """
@@ -1902,34 +1785,14 @@ class DNA_origami(QWidget):
                 self.threader : a thread variable to control the loop_calculation() function
                 self.field : Fields generated by the user in user_input()
         """
-        if not self.automate:
-            input = QInputDialog()
-            text, ok = input.getText(
-                self,
-                "Iterations required",
-                "Please provide the number of iterations",
-            )
+        input = QInputDialog()
+        text, ok = input.getText(
+            self,
+            "Iterations required",
+            "Please provide the number of iterations",
+        )
 
-        # if self.automate:
-        #     ok = True
-
-        #     self.automate = False
-        #     self.progress.setValue(100)
-        #     self.itetext = self.iterator - self.file_counter
-        # if text == 0:rator = 0
-        #     self.file_counter = 0
-        #     self.automate = False
-        #     self.btn9.setEnabled(True)
-        #     self.btn8.setEnabled(True)
-        # else:
-        #     try:
-        #         while not self.threader.isFinished():
-        #             self.threader.wait()
-        #     except RuntimeError:
-        #         self.automate = False
-        #         self.loop_calculation()
-
-        if ok or self.automate:
+        if ok:
             if str(text) != "":
                 if int(text) < 0:
                     error = QErrorMessage(self)
@@ -1943,15 +1806,13 @@ class DNA_origami(QWidget):
 
                 else:
                     if int(text) != 0:
-                        if self.file_counter == 0:
-                            self.iterator = int(text)
+                        self.iterator = int(text)
                         self.btn9.setEnabled(False)
-                        self.btn8.setEnabled(False)
                         self.highlighted.clear()
                         self.index.clear()
 
                         self.progress.setValue(0)
-                        self.progress.setFormat("Progressing")
+                        self.progress.setFormat("Starting")
                         self.automate = True
                         self.threader = QThread()
                         self.looper = Looper(self)
@@ -1959,23 +1820,17 @@ class DNA_origami(QWidget):
                         self.threader.started.connect(self.looper.run_routine)
                         self.threader.start()
 
-                        # self.looper.progression.connect(self.randomize_strand)
                         self.looper.progress.connect(
                             lambda x: self.progress.setValue(x)
                         )
+                        self.looper.progression.connect(
+                            lambda x: self.progress.setFormat(x)
+                        )
+                        self.looper.enable.connect(lambda x: self.btn9.setEnabled(x))
                         self.looper.finished.connect(self.threader.quit)
                         self.looper.finished.connect(self.looper.deleteLater)
                         self.looper.finished.connect(self.threader.wait)
-                        # self.looper.finished.connect(self.loop_calculation)
                         self.threader.finished.connect(self.threader.deleteLater)
-
-        # if not ok:
-        #     # self.best_run()
-        #     self.iterator = 0
-        #     self.file_counter = 0
-        #     self.automate = False
-        #     self.btn9.setEnabled(True)
-        #     self.btn8.setEnabled(True)
 
     def output_image(self):
         """
@@ -1989,10 +1844,16 @@ class DNA_origami(QWidget):
             "Save configuration",
             "/bureau/dna-origami",
         )
-        try:
-            self.canvas.print_figure(filename[0] + ".png", dpi=300)
-        except FileNotFoundError:
-            pass
+
+        if filename[0]:
+            if self.energy == []:
+                error = QErrorMessage(self)
+                error.showMessage(f"There is no heatmap plot at the moment")
+            else:
+                try:
+                    self.canvas.print_figure(filename[0] + ".png", dpi=300)
+                except FileNotFoundError:
+                    pass
 
     def output_data(self):
         """
@@ -2002,19 +1863,25 @@ class DNA_origami(QWidget):
                 self.energy : Matrix used to store the energy loss returned by the Mfold program
                 self.regions : Region provided by the user in user_input()
         """
-        if self.energy != []:
-            filename = QFileDialog.getSaveFileName(
-                self,
-                "Save configuration",
-                "/bureau/dna-origami",
-            )
-            try:
-                with open(filename[0], "w") as configfile:
-                    columns = self.regions
-                    df = pd.DataFrame(self.energy, columns=columns)
-                    df.to_csv(filename[0], index=False)
-            except FileNotFoundError:
-                pass
+
+        filename = QFileDialog.getSaveFileName(
+            self,
+            "Save configuration",
+            "/bureau/dna-origami",
+        )
+
+        if filename[0]:
+            if self.energy == []:
+                error = QErrorMessage(self)
+                error.showMessage(f"There is no heatmap plot at the moment")
+            else:
+                try:
+                    with open(filename[0], "w") as configfile:
+                        columns = self.regions
+                        df = pd.DataFrame(self.energy, columns=columns)
+                        df.to_csv(filename[0], index=False)
+                except FileNotFoundError:
+                    pass
 
     def update(self):
         """
