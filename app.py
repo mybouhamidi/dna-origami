@@ -1,4 +1,5 @@
 import sys, yaml, json, random, time, os, re
+from matplotlib.backends.backend_qt5 import NavigationToolbar2QT
 
 # Import QApplication and the required widgets from PyQt5.QtWidgets
 from PyQt5.QtCore import *
@@ -25,274 +26,255 @@ from genetic import Sequence
 # able25 ABB36 abre25, ABRE25 abb36 ABLE25, acle25 ACB36 acre25, ACRE25 acb36 ACLE25, adle25 ADB36 adre25, ADRE25 adb36 ADLE25
 
 # To do:
-# output the 2D shape of the input given ~V
-# test drive the preoptimize and reject if energy is higher ~V
-# calculate after preoptimize (one try case) V
+# output the 2D shape of the input given V
+# Label plot numbers and strands V
 # fix the progress bar update in the loop calculation V
+# Generate figures only for the highlighted regions V
+# tkinter after: V
 
 
 class Randomizer(QObject):
     render = pyqtSignal()
-    enable = pyqtSignal(bool)
     done = pyqtSignal()
     error = pyqtSignal()
     progress = pyqtSignal(str)
+    progression = pyqtSignal(int)
     trials = 0
 
     def __init__(self, parent):
         QObject.__init__(self)
         self.parent = parent
 
+    @pyqtSlot()
     def run_randomization(self):
-        flag = False
-        counter = 0
-        self.progress.emit("Randomizing")
-        while counter < len(self.parent.highlighted):
-            fields = []
-            for i in range(len(self.parent.highlighted)):
-                text = ""
+        self.progression.emit(0)
+        new = 0
+        max = 0
+        for iteration in range(6):
+            flag = False
+            counter = 0
+            self.progress.emit("Randomizing")
+            while counter < len(self.parent.highlighted):
+                fields = []
+                for i in range(len(self.parent.highlighted)):
+                    text = ""
 
-                for j in range(len(self.parent.highlighted[i])):
-                    if self.parent.highlighted[i][j] == "]":
-                        flag = False
+                    for j in range(len(self.parent.highlighted[i])):
+                        if self.parent.highlighted[i][j] == "]":
+                            flag = False
 
-                    elif flag:
-                        text += random.choice(["G", "T", "C", "A"])
+                        elif flag:
+                            text += random.choice(["G", "T", "C", "A"])
 
-                    elif self.parent.highlighted[i][j] == "[":
-                        flag = True
+                        elif self.parent.highlighted[i][j] == "[":
+                            flag = True
 
-                    else:
-                        text += self.parent.highlighted[i][j]
+                        else:
+                            text += self.parent.highlighted[i][j]
 
-                fields.append(text)
+                    fields.append(text)
 
-            gc = []
-            data = gc_content(gc, self.parent)
-            gci = 0
-            for _ in fields[counter]:
-                if _ == "C" or _ == "G":
-                    gci += 1
-            if gc[self.parent.index[counter]] != gci:
-                if "]" in self.parent.highlighted[counter]:
-                    if "[" in self.parent.highlighted[counter]:
-                        continue
-                    flag = True
-                continue
-
-            else:
-                if (
-                    self.parent.header[self.parent.index[counter]]
-                    in self.parent.fixed_regions.keys()
-                ):
-                    error = QErrorMessage(self)
-                    error.showMessage(
-                        f"Please make sure to uncheck the field {self.parent.header[self.parent.index[counter]].lower()} to allow modifications"
-                    )
-                    break
-
-                if self.parent.index.count(self.parent.index[counter]) > 1:
-                    indices = [
-                        i
-                        for i, x in enumerate(self.parent.index)
-                        if x == self.parent.index[counter]
-                    ]
-                    indices.pop(0)
-
-                    for i in indices:
-                        temp = self.parent.highlighted[i]
-
-                        new_indices_o = [
-                            j for j in range(len(temp)) if temp.startswith("[", j)
-                        ]
-
-                        new_indices_c = [
-                            j for j in range(len(temp)) if temp.startswith("]", j)
-                        ]
-                        temp = [c for c in fields[counter]]
-                        for k in new_indices_o:
-                            temp.insert(k, "[")
-
-                        for l in new_indices_c:
-                            temp.insert(l, "]")
-
-                        temp = "".join(temp)
-                        self.parent.highlighted[i] = temp
-
-                for i in range(len(self.parent.header)):
-                    if self.parent.header[self.parent.index[counter]].islower():
-                        if (
-                            self.parent.header[i]
-                            == self.parent.header[self.parent.index[counter]].upper()
-                        ):
-                            indices = [
-                                j for j, x in enumerate(self.parent.index) if x == i
-                            ]
-                            for k in indices:
-                                temp = self.parent.highlighted[k]
-                                new_indices_o = [
-                                    j
-                                    for j in range(len(temp))
-                                    if temp.startswith("[", j)
-                                ]
-
-                                new_indices_c = [
-                                    j
-                                    for j in range(len(temp))
-                                    if temp.startswith("]", j)
-                                ]
-                                temp = (
-                                    fields[counter][::-1]
-                                    .replace("A", "temp")
-                                    .replace("T", "A")
-                                    .replace("temp", "T")
-                                )
-                                temp = (
-                                    temp.replace("C", "temp")
-                                    .replace("G", "C")
-                                    .replace("temp", "G")
-                                )
-                                temp = [c for c in temp]
-                                for l in new_indices_o:
-                                    temp.insert(l, "[")
-
-                                for m in new_indices_c:
-                                    temp.insert(m, "]")
-
-                                temp = "".join(temp)
-                                self.parent.highlighted[k] = temp
-
-                    if self.parent.header[self.parent.index[counter]].isupper():
-                        if (
-                            self.parent.header[i]
-                            == self.parent.header[self.parent.index[counter]].lower()
-                        ):
-                            indices = [
-                                j for j, x in enumerate(self.parent.index) if x == i
-                            ]
-                            for k in indices:
-                                temp = self.parent.highlighted[k]
-
-                                new_indices_o = [
-                                    j
-                                    for j in range(len(temp))
-                                    if temp.startswith("[", j)
-                                ]
-
-                                new_indices_c = [
-                                    j
-                                    for j in range(len(temp))
-                                    if temp.startswith("]", j)
-                                ]
-                                temp = (
-                                    fields[counter][::-1]
-                                    .replace("A", "temp")
-                                    .replace("T", "A")
-                                    .replace("temp", "T")
-                                )
-                                temp = (
-                                    temp.replace("C", "temp")
-                                    .replace("G", "C")
-                                    .replace("temp", "G")
-                                )
-                                temp = [c for c in temp]
-                                for l in new_indices_o:
-                                    temp.insert(l, "[")
-                                for m in new_indices_c:
-                                    temp.insert(m, "]")
-
-                                temp = "".join(temp)
-
-                                self.parent.highlighted[k] = temp
-
-                self.parent.field[self.parent.index[counter]].setText(fields[counter])
-                self.parent.field[self.parent.index[counter]].setModified(True)
-                self.parent.strand_update()
-
-                try:
+                gc = []
+                data = gc_content(gc, self.parent)
+                gci = 0
+                for _ in fields[counter]:
+                    if _ == "C" or _ == "G":
+                        gci += 1
+                if gc[self.parent.index[counter]] != gci:
                     if "]" in self.parent.highlighted[counter]:
                         if "[" in self.parent.highlighted[counter]:
-                            counter += 1
                             continue
                         flag = True
-                except IndexError:
-                    pass
+                    continue
 
-                counter += 1
+                else:
+                    if (
+                        self.parent.header[self.parent.index[counter]]
+                        in self.parent.fixed_regions.keys()
+                    ):
+                        error = QErrorMessage(self)
+                        error.showMessage(
+                            f"Please make sure to uncheck the field {self.parent.header[self.parent.index[counter]].lower()} to allow modifications"
+                        )
+                        break
 
-        higher = 0
-        for i in range(len(self.parent.energy)):
-            for j in range(len(self.parent.energy)):
-                if self.parent.energy[i][j] > higher:
-                    higher = self.parent.energy[i][j]
+                    if self.parent.index.count(self.parent.index[counter]) > 1:
+                        indices = [
+                            i
+                            for i, x in enumerate(self.parent.index)
+                            if x == self.parent.index[counter]
+                        ]
+                        indices.pop(0)
 
-        max = higher
+                        for i in indices:
+                            temp = self.parent.highlighted[i]
 
-        self.progress.emit("Testing randomization")
+                            new_indices_o = [
+                                j for j in range(len(temp)) if temp.startswith("[", j)
+                            ]
 
-        self.parent.btn3.setEnabled(False)
-        mfold = Mfold(output_folder="./", mfold_command="mfold_quik")
+                            new_indices_c = [
+                                j for j in range(len(temp)) if temp.startswith("]", j)
+                            ]
+                            temp = [c for c in fields[counter]]
+                            for k in new_indices_o:
+                                temp.insert(k, "[")
 
-        self.parent.energy = [
-            [None for strand1 in self.parent.strand] for strand2 in self.parent.strand
-        ]
+                            for l in new_indices_c:
+                                temp.insert(l, "]")
 
-        for i, strand1 in enumerate(self.parent.strand):
-            for j, strand2 in enumerate(self.parent.strand):
-                mfold.run(strand1, strand2, f"{i}_{j}.seq", f"{i}_{j}.aux")
-                try:
-                    with open(f"{i}_{j}.det", "r") as configfile:
-                        for line in configfile:
-                            if line.startswith(" dG = "):
-                                self.parent.energy[i][j] = abs(float(line[10:15]))
-                                break
-                except FileNotFoundError:
-                    self.parent.energy[i][j] = 0
+                            temp = "".join(temp)
+                            self.parent.highlighted[i] = temp
 
-        find_thief(self)
-        mfold.clean_all()
+                    for i in range(len(self.parent.header)):
+                        if self.parent.header[self.parent.index[counter]].islower():
+                            if (
+                                self.parent.header[i]
+                                == self.parent.header[
+                                    self.parent.index[counter]
+                                ].upper()
+                            ):
+                                indices = [
+                                    j for j, x in enumerate(self.parent.index) if x == i
+                                ]
+                                for k in indices:
+                                    temp = self.parent.highlighted[k]
+                                    new_indices_o = [
+                                        j
+                                        for j in range(len(temp))
+                                        if temp.startswith("[", j)
+                                    ]
 
-        higher = 0
-        for i in range(len(self.parent.energy)):
-            for j in range(len(self.parent.energy)):
-                if self.parent.energy[i][j] > higher:
-                    higher = self.parent.energy[i][j]
+                                    new_indices_c = [
+                                        j
+                                        for j in range(len(temp))
+                                        if temp.startswith("]", j)
+                                    ]
+                                    temp = (
+                                        fields[counter][::-1]
+                                        .replace("A", "temp")
+                                        .replace("T", "A")
+                                        .replace("temp", "T")
+                                    )
+                                    temp = (
+                                        temp.replace("C", "temp")
+                                        .replace("G", "C")
+                                        .replace("temp", "G")
+                                    )
+                                    temp = [c for c in temp]
+                                    for l in new_indices_o:
+                                        temp.insert(l, "[")
 
-        new = higher
+                                    for m in new_indices_c:
+                                        temp.insert(m, "]")
 
-        # print(self.trials, "trials")
-        # print(max, new)
-        if new > max and self.trials < 5:
-            while self.parent.center_layout.count() != 0:
-                self.parent.center_layout.removeRow(0)
+                                    temp = "".join(temp)
+                                    self.parent.highlighted[k] = temp
 
-            self.parent.header.clear()
-            self.parent.field.clear()
-            self.parent.label.clear()
-            self.parent.check.clear()
+                        if self.parent.header[self.parent.index[counter]].isupper():
+                            if (
+                                self.parent.header[i]
+                                == self.parent.header[
+                                    self.parent.index[counter]
+                                ].lower()
+                            ):
+                                indices = [
+                                    j for j, x in enumerate(self.parent.index) if x == i
+                                ]
+                                for k in indices:
+                                    temp = self.parent.highlighted[k]
 
-            with open("temp.dat", "r") as configfile:
-                params = yaml.load(configfile, Loader=yaml.FullLoader)
-                self.parent.raw_structure = params["raw_structure"]
-                self.parent.energy = params["energy_matrix"]
-                self.parent.fixed_regions = params["fixed_regions"]
-                self.parent.input_sequence = params["input_sequence_definitions"]
+                                    new_indices_o = [
+                                        j
+                                        for j in range(len(temp))
+                                        if temp.startswith("[", j)
+                                    ]
 
-            self.render.emit()
-            time.sleep(0.4)
+                                    new_indices_c = [
+                                        j
+                                        for j in range(len(temp))
+                                        if temp.startswith("]", j)
+                                    ]
+                                    temp = (
+                                        fields[counter][::-1]
+                                        .replace("A", "temp")
+                                        .replace("T", "A")
+                                        .replace("temp", "T")
+                                    )
+                                    temp = (
+                                        temp.replace("C", "temp")
+                                        .replace("G", "C")
+                                        .replace("temp", "G")
+                                    )
+                                    temp = [c for c in temp]
+                                    for l in new_indices_o:
+                                        temp.insert(l, "[")
+                                    for m in new_indices_c:
+                                        temp.insert(m, "]")
 
-            # print("here, 1")
+                                    temp = "".join(temp)
+
+                                    self.parent.highlighted[k] = temp
+
+                    self.parent.field[self.parent.index[counter]].setText(
+                        fields[counter]
+                    )
+                    self.parent.field[self.parent.index[counter]].setModified(True)
+                    self.parent.strand_update()
+
+                    try:
+                        if "]" in self.parent.highlighted[counter]:
+                            if "[" in self.parent.highlighted[counter]:
+                                counter += 1
+                                continue
+                            flag = True
+                    except IndexError:
+                        pass
+
+                    counter += 1
+
+            higher = 0
+            for i in range(len(self.parent.energy)):
+                for j in range(len(self.parent.energy)):
+                    if self.parent.energy[i][j] > higher:
+                        higher = self.parent.energy[i][j]
+
+            max = higher
+
+            self.progress.emit("Testing randomization")
+
+            self.parent.btn3.setEnabled(False)
+            mfold = Mfold(output_folder="./", mfold_command="mfold_quik")
+
+            self.parent.energy = [
+                [None for strand1 in self.parent.strand]
+                for strand2 in self.parent.strand
+            ]
+
+            for i, strand1 in enumerate(self.parent.strand):
+                for j, strand2 in enumerate(self.parent.strand):
+                    mfold.run(strand1, strand2, f"{i}_{j}.seq", f"{i}_{j}.aux")
+                    try:
+                        with open(f"{i}_{j}.det", "r") as configfile:
+                            for line in configfile:
+                                if line.startswith(" dG = "):
+                                    self.parent.energy[i][j] = abs(float(line[10:15]))
+                                    break
+                    except FileNotFoundError:
+                        self.parent.energy[i][j] = 0
+
             self.parent.automate = True
-            self.parent.calculate()
-            while not self.parent.btn3.isEnabled():
-                _ = 0
+            find_thief(self)
+            mfold.clean_all()
 
-            self.trials += 1
-            self.run_randomization()
+            higher = 0
+            for i in range(len(self.parent.energy)):
+                for j in range(len(self.parent.energy)):
+                    if self.parent.energy[i][j] > higher:
+                        higher = self.parent.energy[i][j]
 
-        else:
-            flag = False
-            if new > max:
+            new = higher
+            if new > max and self.trials < 5:
                 while self.parent.center_layout.count() != 0:
                     self.parent.center_layout.removeRow(0)
 
@@ -309,30 +291,61 @@ class Randomizer(QObject):
                     self.parent.input_sequence = params["input_sequence_definitions"]
 
                 self.render.emit()
-                flag = True
 
-            time.sleep(0.4)
-            self.parent.highlighted.clear()
-            self.parent.index.clear()
-            # print("here, 2")
-            self.parent.automate = False
-            self.parent.calculate()
-            while not self.parent.btn3.isEnabled():
-                _ = 0
+                self.parent.automate = True
+                self.parent.calculate()
+                while not self.parent.btn3.isEnabled():
+                    _ = 0
 
-            time.sleep(0.4)
+                self.trials += 1
+                self.progression.emit(int((self.trials / 5) * 100))
+                time.sleep(0.1)
+            else:
+                break
 
-            cwd = os.getcwd()
-            test = os.listdir(cwd)
-            for item in test:
-                if item.endswith("temp.dat"):
-                    os.remove(os.path.join(cwd, item))
+        flag = False
+        if new > max:
+            while self.parent.center_layout.count() != 0:
+                self.parent.center_layout.removeRow(0)
 
-            if flag:
+            self.parent.header.clear()
+            self.parent.field.clear()
+            self.parent.label.clear()
+            self.parent.check.clear()
+
+            with open("temp.dat", "r") as configfile:
+                params = yaml.load(configfile, Loader=yaml.FullLoader)
+                self.parent.raw_structure = params["raw_structure"]
+                self.parent.energy = params["energy_matrix"]
+                self.parent.fixed_regions = params["fixed_regions"]
+                self.parent.input_sequence = params["input_sequence_definitions"]
+
+            self.render.emit()
+            flag = True
+
+        self.parent.highlighted.clear()
+        self.parent.index.clear()
+        self.parent.shape.clear()
+
+        self.progress.emit("Generating structures")
+        self.progression.emit(100)
+        self.parent.automate = False
+        self.parent.calculate()
+        while not self.parent.btn3.isEnabled():
+            _ = 0
+
+        cwd = os.getcwd()
+        test = os.listdir(cwd)
+        for item in test:
+            if item.endswith("temp.dat"):
+                os.remove(os.path.join(cwd, item))
+
+        if flag:
+            if not self.parent.automate:
                 self.error.emit()
-            self.progress.emit("Done")
-            self.enable.emit(True)
-            self.done.emit()
+
+        self.progress.emit("DONE")
+        self.done.emit()
 
 
 class Looper(QObject):
@@ -349,14 +362,16 @@ class Looper(QObject):
     """
 
     finished = pyqtSignal()
-    enable = pyqtSignal(bool)
     progression = pyqtSignal(str)
+    calculate = pyqtSignal()
+    randomize = pyqtSignal()
     progress = pyqtSignal(int)
 
     def __init__(self, parent):
         QObject.__init__(self)
         self.parent = parent
 
+    @pyqtSlot()
     def run_routine(self):
         """ "
         This function calls the mfold thread and waits for it to finish before updating the progress bar and sends the progress to
@@ -367,36 +382,39 @@ class Looper(QObject):
                 self.progress :
                 self.finished :
         """
+        for i in range(self.parent.iterator):
+            self.progress.emit(
+                int((self.parent.file_counter / self.parent.iterator) * 100)
+            )
+            self.parent.automate = True
 
-        self.parent.automate = True
-        self.parent.calculate()
-        while not self.parent.btn3.isEnabled():
             self.progression.emit("Calculating")
-            _ = 0
+            self.calculate.emit()
 
-        time.sleep(0.4)
-        # self.parent.automate = True
+            self.parent.calculate()
+            while not self.parent.btn3.isEnabled():
+                _ = 0
 
-        self.parent.randomize_strand()
-        while not self.parent.btn8.isEnabled():
+            self.progress.emit(
+                int((self.parent.file_counter / self.parent.iterator) * 100)
+            )
+
+            self.parent.automate = True
+
             self.progression.emit("Randomizing")
-            _ = 0
+            self.randomize.emit()
+            self.parent.randomize_strand()
+            while not self.parent.btn8.isEnabled():
+                _ = 0
 
-        time.sleep(0.4)
-        print("here", self.parent.file_counter, self.parent.iterator)
-        self.progression.emit("Progressing")
+            self.parent.file_counter += 1
 
-        self.parent.file_counter += 1
-        self.progress.emit(int((self.parent.file_counter / self.parent.iterator) * 100))
-        if self.parent.file_counter == self.parent.iterator:
-            self.parent.automate = False
-            self.progress.emit(100)
-            self.parent.file_counter = 0
-            self.parent.iterator = 0
-            self.enable.emit(True)
-            self.finished.emit()
-        else:
-            self.run_routine()
+        self.progress.emit(100)
+        self.parent.automate = False
+        self.progression.emit("DONE")
+        self.parent.file_counter = 0
+        self.parent.iterator = 0
+        self.finished.emit()
 
 
 class Worker(QObject):
@@ -412,12 +430,14 @@ class Worker(QObject):
 
     finished = pyqtSignal()
     progress = pyqtSignal(str)
+    render = pyqtSignal()
     progression = pyqtSignal(int)
 
     def __init__(self, parent):
         QObject.__init__(self)
         self.parent = parent
 
+    @pyqtSlot()
     def run_call(self):
         """
         This function initiates the call to the mfold program and populates the energy matrix of the main class while updating the progress.
@@ -428,6 +448,7 @@ class Worker(QObject):
                 self.progression :
         """
         mfold = Mfold(output_folder="./", mfold_command="mfold_quik")
+
         self.progress.emit("PROGRESSING")
 
         self.parent.energy = [
@@ -452,12 +473,11 @@ class Worker(QObject):
         if not self.parent.automate:
             self.progression.emit(100)
 
-        self.progress.emit("Generating structures")
-
         find_thief(self)
-        mfold.clean_all()
-        self.progress.emit("DONE")
+        self.render.emit()
         self.finished.emit()
+
+        self.progress.emit("DONE")
 
 
 def find_thief(self):
@@ -494,29 +514,12 @@ def find_thief(self):
 
             else:
                 try:
-                    with open(f"{i}_{j}.out", "r") as configfile:
-                        flagger = False
-                        stop = False
-                        _ = "\n"
-                        for line in configfile:
-                            if stop:
-                                data[f"{i}{j}"]["shape"] = _
-                                break
-                            if flagger:
-                                if line.startswith("Structure    2"):
-                                    stop = True
-                                else:
-                                    if not line.isspace():
-                                        _ += line
-                            if line.startswith(" dG"):
-                                flagger = True
-
                     with open(f"{i}_{j}.ct", "r") as configfile:
                         counter = 0
                         max = 0
                         for line in configfile:
                             try:
-                                if flag and int(line[25:30]) == 0:
+                                if flag and int(line[26:30]) == 0:
                                     if counter <= len(self.parent.strand[i].bases):
                                         end = counter
                                     else:
@@ -525,9 +528,9 @@ def find_thief(self):
                                 if flag:
                                     letter += line[7:8]
 
-                                if float(line[25:30]) > max:
+                                if int(line[26:30]) > max:
                                     letter = ""
-                                    max = float(line[25:30])
+                                    max = int(line[26:30])
                                     flag = True
                                     letter += line[7:8]
 
@@ -555,92 +558,7 @@ def find_thief(self):
                         data[f"{i}{j}"]["index_app"] = index
                         data[f"{i}{j}"]["index_ct"] = index1
                         data[f"{i}{j}"]["end"] = end
-
-                    nodes_list = []
-                    edges_list = []
-                    with open(f"{i}_{j}.ct", "r") as configfile:
-                        text = ""
-                        counter = 0
-                        before = 0
-                        after = 0
-                        center = 0
-                        extra = 0
-                        for line in configfile:
-                            if line[7:8] == "d":
-                                exit = int(line[3:6])
-                                continue
-
-                            if line[7:8] == "L":
-                                continue
-
-                            if counter < len(self.parent.strand[i].bases):
-                                before = int(line[12:15])
-                                after = int(line[20:22])
-                                center = int(line[3:6])
-                                nodes_list.append(before)
-                                edges_list.append((before, center))
-                                edges_list.append((center, after))
-                                if int(line[27:30]) != 0:
-                                    if int(line[27:30]) > len(
-                                        self.parent.strand[i].bases
-                                    ):
-                                        extra = int(line[27:30]) - 4
-                                    else:
-                                        extra = int(line[27:30])
-                                    edges_list.append((before, extra))
-                                counter += 1
-
-                            else:
-                                before = int(line[12:15]) - 3
-                                after = int(line[20:22]) - 3
-                                if exit == int(line[3:6]):
-                                    if line[7:8] == "d":
-                                        nodes_list.append(before)
-                                        edges_list.append((nodes_list[-1], 0))
-                                        break
-                                    else:
-                                        nodes_list.append(before)
-                                        edges_list.append((nodes_list[-1], 0))
-                                        break
-                                center = int(line[3:6]) - 3
-                                nodes_list.append(before)
-                                edges_list.append((before, center))
-                                if int(line[27:30]) != 0:
-                                    extra = int(line[27:30]) - 1
-                                    edges_list.append((before, extra))
-                                counter += 1
-
-                    text = self.parent.strand[i].bases + self.parent.strand[j].bases
-                    G = nx.DiGraph()
-
-                    labels = {}
-                    for _ in range(len(text)):
-                        G.add_node(nodes_list[_], weight=text[_])
-                        labels[_] = G.nodes[_]["weight"]
-
-                    G.add_edges_from(edges_list)
-
-                    options = {
-                        "edgecolors": "black",
-                        "linewidths": 0.5,
-                        "node_color": "white",
-                        "width": 0.5,
-                        "arrowsize": 1,
-                        "node_size": 80,
-                        "font_size": 6,
-                    }
-
-                    nx.draw_kamada_kawai(
-                        G,
-                        with_labels=True,
-                        labels=labels,
-                        **options,
-                    )
-
-                    plt.savefig(f"{i}_{j}.png", dpi=300)
-                    plt.clf()
-
-                    data[f"{i}{j}"]["shape"] = f"{i}_{j}.png"
+                        data[f"{i}{j}"]["shape"] = f"{i}_{j}.png"
 
                 except FileNotFoundError:
                     data[f"{i}{j}"]["energy"] = 0
@@ -831,10 +749,68 @@ def gc_content(gc, self):
         gci = 0
 
     data = {}
-    for i in range(len(self.population_size)):
-        data[self.header[i]] = temp[i]
+
+    for k in range(len(self.population_size)):
+        data[self.header[k]] = temp[k]
 
     return data
+
+
+class Paint_structure(QMainWindow):
+    def _init_(self, main):
+        super().__init__()
+        self.parent = main
+
+    def paint(self, x, y):
+        self.setWindowTitle("Structure viewer")
+        self._zoom = 0
+        self.tabs = QTabWidget()
+        self.tabs.setFixedSize(1200, 700)
+        self.main_layout = QVBoxLayout()
+
+        cwd = os.getcwd()
+        test = os.listdir(cwd)
+
+        for item in test:
+            if item.endswith(f"{y}_{x}.png"):
+                e = f"{y}_{x}.png"
+
+                label = QLabel(
+                    f"This is the interaction between {self.parent().regions[y]} (from 1 to {len(self.parent().strand[y].bases) + 1}) and {self.parent().regions[x]} (from {len(self.parent().strand[y].bases) + 1} to {len(self.parent().strand[y].bases) + len(self.parent().strand[x].bases)})({e})"
+                )
+
+                pixmap = QPixmap(e)
+                item = QGraphicsPixmapItem(pixmap)
+                scene = QGraphicsScene(self)
+                scene.addItem(item)
+                self.view = QGraphicsView()
+                self.view.setScene(scene)
+
+                tab = QWidget()
+                tab.layout = QVBoxLayout()
+                tab.layout.addWidget(label)
+                tab.layout.addWidget(self.view)
+                tab.setLayout(tab.layout)
+                self.tabs.addTab(
+                    tab, f"{self.parent().regions[y]} and {self.parent().regions[x]}"
+                )
+
+                self.setCentralWidget(self.tabs)
+
+                self.setFixedSize(1200, 700)
+                self.move(100, 100)
+                self.show()
+                break
+
+    def keyPressEvent(self, event):
+        if event.key() == 43:
+            self._zoom = 1.25
+            self.view.scale(self._zoom, self._zoom)
+        elif event.key() == 45:
+            self._zoom = 0.8
+            self.view.scale(self._zoom, self._zoom)
+        elif event.key() == 72:
+            self.view.fitInView(self.view.sceneRect(), Qt.KeepAspectRatio)
 
 
 class DNA_origami(QWidget):
@@ -902,19 +878,13 @@ class DNA_origami(QWidget):
         self.btn5.setStyleSheet(
             "QPushButton {background-color: #007bff; color: white; border: 5px solid transparent; border-radius: 5px}"
         )
-        self.btn6 = QPushButton()
-        self.btn6.setFixedSize(40, 40)
-        self.btn6.setIcon(QIcon("assets/image-solid.svg"))
-        self.btn6.setIconSize(QSize(30, 30))
-        self.btn6.setStyleSheet(
-            "QPushButton {background-color: #fff; color: white; border: 5px solid transparent; border-radius: 5px}"
-        )
         self.btn7 = QPushButton()
         self.btn7.setFixedSize(40, 40)
+        self.btn7.setToolTip("Export data")
         self.btn7.setIcon(QIcon("assets/save-solid.svg"))
-        self.btn7.setIconSize(QSize(30, 30))
+        self.btn7.setIconSize(QSize(20, 20))
         self.btn7.setStyleSheet(
-            "QPushButton {background-color: #fff; color: white; border: 5px solid transparent; border-radius: 5px}"
+            "QPushButton {border: 5px solid transparent; border-radius: 5px}"
         )
         self.btn8 = QPushButton("Pre-optimize")
         self.btn8.setFixedSize(150, 70)
@@ -929,42 +899,32 @@ class DNA_origami(QWidget):
             "QPushButton {background-color: #007bff; color: white; border: 5px solid transparent; border-radius: 5px}"
         )
         self.btn5.clicked.connect(self.load)
-        self.btn6.clicked.connect(self.output_image)
         self.btn7.clicked.connect(self.output_data)
         self.btn8.clicked.connect(self.randomize_strand)
         self.btn9.clicked.connect(self.loop_calculation)
         self.tabs = QTabWidget()
-        self.tabs.setFixedSize(500, 500)
+        self.tabs.setFixedSize(500, 570)
 
-        self.canvas = FigureCanvas(plt.Figure(tight_layout=True, frameon=False))
-        self.canvas.setFixedSize(480, 450)
+        self.canvas = FigureCanvas(
+            plt.Figure(dpi=100, tight_layout=True, frameon=False)
+        )
+        self.canvas.setFixedSize(490, 450)
+        toolbar = NavigationToolbar2QT(self.canvas, self)
+        horizontal_toolbar = QHBoxLayout()
+        horizontal_toolbar.addWidget(self.btn7)
+        horizontal_toolbar.addWidget(toolbar)
         self.tab1 = QWidget()
-        self.tab2 = QWidget()
         self.tabs.addTab(self.tab1, "Energy")
-        self.tabs.addTab(self.tab2, "Structure")
 
         self.tab1.layout = QVBoxLayout()
         self.tab1.layout.addWidget(self.canvas)
+        self.tab1.layout.addLayout(horizontal_toolbar)
         self.tab1.setLayout(self.tab1.layout)
-
-        self.tab2.layout = QVBoxLayout()
-        self.tab2_secondary = QFormLayout()
-        self.scroll = QScrollArea()
-        self.scroll.setStyleSheet("border: none; background-color: white")
-        self.mygroup = QGroupBox()
-        self.mygroup.setStyleSheet("border: none; background-color: white")
-        self.mygroup.setLayout(self.tab2_secondary)
-        self.scroll.setWidget(self.mygroup)
-        self.scroll.setWidgetResizable(True)
-        self.tab2.layout.addWidget(self.scroll)
-        self.tab2.setLayout(self.tab2.layout)
+        self.canvas.mpl_connect("button_press_event", self.render_structure)
 
         main_layout = QHBoxLayout()
 
-        temp_top = QHBoxLayout()
         temp_bottom = QHBoxLayout()
-        temp_top.addWidget(self.btn6)
-        temp_top.addWidget(self.btn7)
         self.top_layout = QHBoxLayout()
         self.top_layout.setSpacing(150)
         self.center_layout = QFormLayout()
@@ -993,7 +953,6 @@ class DNA_origami(QWidget):
         self.left_side.addWidget(self.scroll_1)
         self.left_side.addLayout(self.bottom_layout)
 
-        self.right_side.addLayout(temp_top)
         self.right_side.addWidget(self.tabs)
         self.progress = QProgressBar()
         self.progress.setAlignment(Qt.AlignHCenter)
@@ -1448,15 +1407,20 @@ class DNA_origami(QWidget):
         index = 0
 
         gc = []
-        data = gc_content(gc, self)
+        _ = {}
 
-        for i in range(len(gc)):
-            if (gc[i] / self.population_size[i]) >= 0.4 and (
-                gc[i] / self.population_size[i]
+        try:
+            _ = gc_content(gc, self)
+        except IndexError:
+            self.calculate()
+
+        for j in range(len(gc)):
+            if (gc[j] / self.population_size[j]) >= 0.4 and (
+                gc[j] / self.population_size[j]
             ) <= 0.6:
                 flag_range = True
             else:
-                index = i
+                index = j
                 flag_range = False
                 break
 
@@ -1476,23 +1440,23 @@ class DNA_origami(QWidget):
             if flag_range:
                 for i in range(len(self.field)):
                     self.field[i].setToolTip("")
+
                 self.thread = QThread()
                 self.worker = Worker(self)
                 self.worker.moveToThread(self.thread)
+
                 self.thread.started.connect(self.worker.run_call)
-                self.thread.start()
 
                 self.worker.progression.connect(lambda x: self.progress.setValue(x))
                 self.worker.progress.connect(lambda x: self.progress.setFormat(x))
-                self.worker.finished.connect(self.update)
-                self.worker.finished.connect(self.highlight_thief)
-                self.worker.finished.connect(self.thread.quit)
+
+                self.worker.render.connect(self.highlight_thief)
                 self.worker.finished.connect(self.worker.deleteLater)
-                self.worker.finished.connect(self.thread.wait)
-                self.thread.finished.connect(self.thread.deleteLater)
+                self.worker.finished.connect(self.terminate_thread)
 
                 self.progress.setTextVisible(True)
-                self.progress.setFormat("PROGRESSING")
+
+                self.thread.start()
 
             else:
                 if gc[index] / self.population_size[index] < 0.4:
@@ -1549,6 +1513,14 @@ class DNA_origami(QWidget):
                         self.strand_update()
                         self.calculate()
 
+    def terminate_thread(self):
+        self.thread.quit()
+        self.thread.wait()
+        self.update()
+        mfold = Mfold(output_folder="./", mfold_command="mfold_quik")
+        mfold.clean_all()
+        self.btn3.setEnabled(True)
+
     def highlight_thief(self):
         """
         This function is used to highlighted the fields responsable for the energy loss binding the different strands.
@@ -1563,52 +1535,210 @@ class DNA_origami(QWidget):
         for i in range(2):
             intermediate_process(self)
 
-        while self.tab2_secondary.count() != 0:
-            self.tab2_secondary.removeRow(0)
-
         if not self.automate:
-            counter = 0
             for e in self.shape:
-                if (
-                    "[" in self.highlighted[counter]
-                    and "]" in self.highlighted[counter]
-                ):
-                    labelImage = QLabel(self.highlighted[counter])
-                    pixmap = QPixmap(e)
-                    pixmap = pixmap.scaled(1000, 1000)
-                    labelImage.setPixmap(pixmap)
-                    self.tab2_secondary.addWidget(QLabel(self.highlighted[counter]))
-                    self.tab2_secondary.addWidget(labelImage)
-                    counter += 1
-                else:
-                    labelImage = QLabel(self.highlighted[counter])
-                    pixmap = QPixmap(e)
-                    pixmap = pixmap.scaled(1000, 1000)
-                    labelImage.setPixmap(pixmap)
-                    # print("before", self.highlighted[counter])
-                    while not "]" in self.highlighted[counter]:
-                        # print("during", self.highlighted[counter])
-                        self.tab2_secondary.addWidget(QLabel(self.highlighted[counter]))
+                _ = e.replace(".png", "").split("_")
+                _ = [int(i) for i in _]
+                with open(f"{_[0]}_{_[1]}.ct", "r") as configfile:
+                    counter = 0
+                    max = 0
+                    for line in configfile:
+                        if line[7:8] == "d":
+                            counter += 1
+                            continue
+                        if counter > (
+                            len(self.strand[_[0]].bases)
+                            + len(self.strand[_[1]].bases)
+                            + 4
+                        ):
+                            break
+                        if int(line[26:30]) > max:
+                            max = int(line[26:30])
                         counter += 1
-                    # print("after", self.highlighted[counter])
-                    self.tab2_secondary.addWidget(QLabel(self.highlighted[counter]))
-                    self.tab2_secondary.addWidget(labelImage)
-                    counter += 1
 
-        cwd = os.getcwd()
-        test = os.listdir(cwd)
-        for i in range(len(self.strand)):
-            for j in range(len(self.strand)):
-                for item in test:
-                    if item.endswith(f"{i}_{j}.png"):
-                        if not item in self.shape:
-                            os.remove(os.path.join(cwd, item))
+                with open(f"{_[0]}_{_[1]}.ct", "r") as configfile:
+                    nodes_list = []
+                    flag = False
+                    G = nx.MultiDiGraph()
+
+                    labels = {}
+                    text = ""
+                    counter = 0
+                    before = 0
+                    center = 0
+                    extra = 0
+                    for line in configfile:
+                        if line[7:8] == "d":
+                            exit = int(line[3:6])
+                            continue
+
+                        if line[7:8] == "L":
+                            continue
+
+                        if int(line[26:30]) == max:
+                            flag = True
+
+                        if counter < len(self.strand[_[0]].bases):
+                            before = int(line[12:15])
+                            center = int(line[3:6])
+                            nodes_list.append(before)
+                            G.add_edge(before, center, color="black", weight=1)
+
+                            if counter == 1:
+                                G.add_node(
+                                    f"{self.regions[_[0]]}:{counter}",
+                                    weight=f"{self.regions[_[0]]}:{counter}",
+                                )
+                                labels[f"{self.regions[_[0]]}:{counter}"] = f"{counter}"
+                                G.add_edge(
+                                    f"{self.regions[_[0]]}:{counter}",
+                                    0,
+                                    color="black",
+                                    weight=1,
+                                )
+
+                            if (counter + 1) % 10 == 0:
+                                G.add_node(
+                                    f"{self.regions[_[0]]}:{counter+1}",
+                                    weight=f"{self.regions[_[0]]}:{counter+1}",
+                                )
+                                labels[
+                                    f"{self.regions[_[0]]}:{counter+1}"
+                                ] = f"{counter+1}"
+                                G.add_edge(
+                                    before,
+                                    f"{self.regions[_[0]]}:{counter+1}",
+                                    color="black",
+                                    weight=1,
+                                )
+
+                            if int(line[26:30]) != 0:
+                                if flag:
+                                    if int(line[26:30]) < len(self.strand[_[0]].bases):
+                                        extra = int(line[26:30])
+                                    else:
+                                        extra = int(line[26:30]) - 3
+                                    G.add_edge(before, extra, color="red", weight=1)
+                                else:
+                                    if int(line[26:30]) < len(self.strand[_[0]].bases):
+                                        extra = int(line[26:30])
+                                    else:
+                                        extra = int(line[26:30]) - 3
+                                    if not G.has_edge(extra, before):
+                                        G.add_edge(
+                                            before, extra, color="black", weight=1
+                                        )
+                            else:
+                                flag = False
+
+                            counter += 1
+
+                        else:
+                            before = int(line[12:15]) - 3
+                            center = int(line[3:6]) - 3
+                            if int(line[26:30]) < len(self.strand[_[0]].bases):
+                                extra = int(line[26:30])
+                            else:
+                                extra = int(int(line[26:30]) - 3)
+                            nodes_list.append(before)
+
+                            if (counter + 1) % 10 == 0:
+                                G.add_node(
+                                    f"{self.regions[_[1]]}:{counter+1}",
+                                    weight=f"{self.regions[_[1]]}:{counter+1}",
+                                )
+                                labels[
+                                    f"{self.regions[_[1]]}:{counter+1}"
+                                ] = f"{counter+1}"
+                                G.add_edge(
+                                    before,
+                                    f"{self.regions[_[1]]}:{counter+1}",
+                                    color="black",
+                                    weight=1,
+                                )
+
+                            if exit == int(line[3:6]):
+                                if line[7:8] == "d":
+                                    nodes_list.append(before)
+                                    G.add_edge(
+                                        nodes_list[-1], 0, color="black", weight=1
+                                    )
+                                    break
+                                else:
+                                    nodes_list.append(before)
+                                    G.add_edge(
+                                        nodes_list[-1], 0, color="black", weight=1
+                                    )
+                                    break
+
+                            G.add_edge(before, center, color="black", weight=1)
+                            if extra != 0:
+                                if flag:
+                                    G.add_edge(before, extra, color="red", weight=1)
+                                else:
+                                    if not G.has_edge(extra, before):
+                                        G.add_edge(
+                                            before, extra, color="black", weight=1
+                                        )
+                            else:
+                                flag = False
+
+                            counter += 1
+
+                    text = self.strand[_[0]].bases + self.strand[_[1]].bases
+
+                    for _ in range(len(text)):
+                        G.add_node(nodes_list[_], weight=text[_])
+                        labels[_] = G.nodes[_]["weight"]
+
+                    options = {
+                        "linewidths": 1,
+                        "node_color": "#d3d3d3",
+                        "width": 1.5,
+                        "arrowstyle": "-",
+                        "arrowsize": 4,
+                        "node_size": 60,
+                        "font_size": 5,
+                    }
+
+                    colors = nx.get_edge_attributes(G, "color").values()
+                    if len(text) < 100:
+                        dist = dict(nx.shortest_path_length(G, weight="10"))
+                    else:
+                        dist = dict(
+                            nx.shortest_path_length(G, weight=str(10 * len(text)))
+                        )
+                    # print(dist)
+                    pos = nx.kamada_kawai_layout(G, dist=dist)
+                    # print(pos)
+                    nx.draw(
+                        G,
+                        pos=pos,
+                        with_labels=True,
+                        labels=labels,
+                        edge_color=colors,
+                        **options,
+                    )
+
+                    plt.savefig(e, dpi=300)
+                    plt.close()
+                    plt.clf()
+
+            cwd = os.getcwd()
+            test = os.listdir(cwd)
+
+            for item in test:
+                if item.endswith(f".png"):
+                    if not item in self.shape:
+                        os.remove(os.path.join(cwd, item))
+
+            self.shape.clear()
 
         highlighted = []
-        highlighted = self.highlighted
+        highlighted += self.highlighted
         counter = 0
         index = []
-        index = self.index
+        index += self.index
         for d in index:
             if self.header[d].isupper():
                 highlighted[counter] = (
@@ -1696,7 +1826,15 @@ class DNA_origami(QWidget):
                         flag = True
             counter += 1
 
-        self.btn3.setEnabled(True)
+    def render_structure(self, event):
+        self.new_widget = Paint_structure(self)
+        try:
+            x = int(np.round(event.xdata))
+            y = int(np.round(event.ydata))
+            # print(x, y)
+            self.new_widget.paint(x, y)
+        except TypeError:
+            pass
 
     def randomize_strand(self):
         """
@@ -1750,20 +1888,22 @@ class DNA_origami(QWidget):
                 self.btn8.setEnabled(False)
                 self.threading = QThread()
                 self.work = Randomizer(self)
-                self.work.moveToThread(self.threading)
-                self.threading.started.connect(self.work.run_randomization)
-                self.threading.start()
-                self.work.render.connect(self.render_form)
-                self.work.render.connect(self.update)
-                self.work.progress.connect(lambda x: self.progress.setFormat(x))
-                self.work.enable.connect(self.enable_button)
-                self.work.error.connect(self.failed_randomization)
-                self.work.done.connect(self.threading.quit)
-                self.work.done.connect(self.work.deleteLater)
-                self.work.done.connect(self.threading.wait)
-                self.threading.finished.connect(self.threading.deleteLater)
 
-    def enable_button(self):
+                self.work.moveToThread(self.threading)
+
+                self.threading.started.connect(self.work.run_randomization)
+                self.work.render.connect(self.render_form)
+                self.work.progress.connect(lambda x: self.progress.setFormat(x))
+                self.work.progression.connect(lambda x: self.progress.setValue(x))
+                self.work.error.connect(self.failed_randomization)
+                self.work.done.connect(self.work.deleteLater)
+                self.work.done.connect(self.enabler_8)
+
+                self.threading.start()
+
+    def enabler_8(self):
+        self.threading.quit()
+        self.threading.wait()
         self.btn8.setEnabled(True)
 
     def failed_randomization(self):
@@ -1810,50 +1950,29 @@ class DNA_origami(QWidget):
                         self.btn9.setEnabled(False)
                         self.highlighted.clear()
                         self.index.clear()
+                        self.shape.clear()
 
-                        self.progress.setValue(0)
-                        self.progress.setFormat("Starting")
                         self.automate = True
                         self.threader = QThread()
                         self.looper = Looper(self)
+
                         self.looper.moveToThread(self.threader)
                         self.threader.started.connect(self.looper.run_routine)
-                        self.threader.start()
-
                         self.looper.progress.connect(
                             lambda x: self.progress.setValue(x)
                         )
                         self.looper.progression.connect(
                             lambda x: self.progress.setFormat(x)
                         )
-                        self.looper.enable.connect(lambda x: self.btn9.setEnabled(x))
-                        self.looper.finished.connect(self.threader.quit)
                         self.looper.finished.connect(self.looper.deleteLater)
-                        self.looper.finished.connect(self.threader.wait)
-                        self.threader.finished.connect(self.threader.deleteLater)
+                        self.looper.finished.connect(self.enabler_9)
 
-    def output_image(self):
-        """
-        This function is used to output an image of the heatmap generated by the call to the Mfold program.
+                        self.threader.start()
 
-        Args:
-                self.canvas : A matplotlib figure class to draw the heatmap from the energy matrix stored in calculate()
-        """
-        filename = QFileDialog.getSaveFileName(
-            self,
-            "Save configuration",
-            "/bureau/dna-origami",
-        )
-
-        if filename[0]:
-            if self.energy == []:
-                error = QErrorMessage(self)
-                error.showMessage(f"There is no heatmap plot at the moment")
-            else:
-                try:
-                    self.canvas.print_figure(filename[0] + ".png", dpi=300)
-                except FileNotFoundError:
-                    pass
+    def enabler_9(self):
+        self.threader.quit()
+        self.threader.wait()
+        self.btn9.setEnabled(True)
 
     def output_data(self):
         """
@@ -1876,10 +1995,10 @@ class DNA_origami(QWidget):
                 error.showMessage(f"There is no heatmap plot at the moment")
             else:
                 try:
-                    with open(filename[0], "w") as configfile:
+                    with open(filename[0] + ".csv", "w") as configfile:
                         columns = self.regions
                         df = pd.DataFrame(self.energy, columns=columns)
-                        df.to_csv(filename[0], index=False)
+                        df.to_csv(configfile, index=False)
                 except FileNotFoundError:
                     pass
 
@@ -1897,13 +2016,11 @@ class DNA_origami(QWidget):
             error = QErrorMessage(self)
             error.showMessage(f"The energy matrix is empty!")
         else:
+            self.canvas.figure.clear()
+            ax = self.canvas.figure.add_subplot(111)
             a = self.energy
 
             ticks = self.regions
-
-            self.canvas.figure.clear()
-
-            ax = self.canvas.figure.subplots()
 
             if self.max != 0:
                 try:
@@ -1913,7 +2030,7 @@ class DNA_origami(QWidget):
                 except TypeError:
                     self.update()
                 ax.set_xticks(np.arange(len(ticks)))
-                ax.set_yticks(np.arange(len(ticks)))
+                ax.axes.set_yticks(np.arange(len(ticks)))
                 ax.set_xticklabels(ticks, fontsize=10, fontrotation=20, ha="right")
                 ax.set_yticklabels(ticks, fontsize=10)
                 ax.set_title("Energy Matrix for the different regions")
@@ -1929,72 +2046,21 @@ class DNA_origami(QWidget):
                 ax.set_yticklabels(ticks, fontsize=10)
                 ax.set_title("Energy Matrix for region interactions")
 
-            cbar = ax.figure.colorbar(im, label="Kcal/mol", orientation="horizontal")
+            ax.figure.colorbar(
+                im,
+                label="Kcal/mol",
+                orientation="horizontal",
+            )
+            # cbar.update_normal(im)
+            # cbar = self.canvas.axes.figure.colorbar(
+            #     im,
+            #     ax=self.canvas.axes,
+            #     label="Kcal/mol",
+            #     orientation="horizontal",
+            # )
+
             self.canvas.draw()
-
-    # def loop_saver(self):
-    #     """
-    #     This function is used to save the current configuration while running the loop iteration.
-
-    #     Args:
-    #             self.file_counter : a counter for the current iteration in loop_calculation()
-    #             self.input_sequence : The randomnly generated sequences from the class Sequence and save for prospective usages
-    #             self.raw_structure : The raw input as inputed by the user from user_input()
-    #             self.fixed_regions : A dictionary containing the fixed regions as defined by the user in the form of region identifier as key
-    #                                 and associated sequence as item
-    #             self.energy : Matrix used to store the energy loss returned by the Mfold program
-    #     """
-    #     if self.file_counter == 0:
-    #         cwd = os.getcwd()
-    #         test = os.listdir(cwd)
-    #         for item in test:
-    #             if item.endswith(".dat"):
-    #                 os.remove(os.path.join(cwd, item))
-    #     params = {}
-    #     data = gc_content([], self)
-    #     for i in range(len(self.header)):
-    #         self.input_sequence[self.header[i]] = data[self.header[i]]
-
-    #     params["raw_structure"] = self.raw_structure
-    #     params["mfold_command"] = "./mfold_quik"
-    #     params["boltzmann_factor"] = 1
-    #     params["fixed_regions"] = self.fixed_regions
-    #     params["input_sequence_definitions"] = self.input_sequence
-    #     params["energy_matrix"] = self.energy
-    #     try:
-    #         with open(str(f"loop-{self.file_counter}" + ".dat"), "w") as configfile:
-    #             yaml.dump(params, configfile)
-    #     except FileNotFoundError:
-    #         pass
-
-    #     self.file_counter += 1
-
-    # def best_run(self):
-    #     """
-    #     This function is used to suggest the best iteration depending on the randomization in the loop calculation process.
-
-    #     Args:
-    #             self.file_counter : a counter for the current iteration in loop_calculation()
-    #     """
-    #     counter = []
-    #     length = self.file_counter
-
-    #     for i in range(length):
-    #         higher = 0
-    #         with open(str(f"loop-{i}" + ".dat"), "r") as configfile:
-    #             params = yaml.load(configfile, Loader=yaml.FullLoader)
-    #             matrix = params["energy_matrix"]
-    #             for j in range(len(matrix)):
-    #                 if max(matrix[j]) > higher:
-    #                     higher = max(matrix[j])
-    #             counter.append(higher)
-
-    #     temp = min(counter)
-    #     index = counter.index(temp)
-    #     error = QErrorMessage(self)
-    #     error.showMessage(
-    #         f"The best iteration with the least energy is in file loop_{index}!"
-    #     )
+            self.canvas.flush_events()
 
     def closeEvent(self, event):
         """
