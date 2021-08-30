@@ -133,20 +133,30 @@ class Mfold:
         self.folder = output_folder
         self.command = mfold_command
 
-    def run(self, strand1, strand2, sequence_file="a.seq", settings_file="a.aux"):
+    def run(
+        self,
+        strand1,
+        strand2,
+        aux_constraints,
+        sequence_file="a.seq",
+        settings_file="a.aux",
+    ):
         seq_path = os.path.join(self.folder, sequence_file)
         set_path = os.path.join(self.folder, settings_file)
 
         with open(seq_path, "w") as seqfile:
             seqfile.write(strand1.bases + Mfold.linker_sequence + strand2.bases)
         with open(set_path, "w") as setfile:
-            for constraint in Mfold.get_constraints(strand1, strand2):
-                setfile.write(constraint)
+            if aux_constraints is not None:
+                for constraint in Mfold.get_constraints(strand1, strand2):
+                    aux_constraints += constraint
+                setfile.write(aux_constraints)
+            else:
+                for constraint in Mfold.get_constraints(strand1, strand2):
+                    setfile.write(constraint)
 
         subprocess.run(
-            [self.command, f"SEQ={seq_path}", f"AUX={set_path}"],
-            cwd=self.folder,
-            capture_output=False,
+            [self.command, f"SEQ={seq_path}", f"AUX={set_path}"], cwd=self.folder
         )
 
     def clean_all(self):
