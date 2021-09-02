@@ -1939,6 +1939,7 @@ class DNA_origami(QWidget):
                     [None for strand1 in self.strand] for strand2 in self.strand
                 ]
 
+                data = gc_content([], self)
                 for i, strand1 in enumerate(self.strand):
                     for j, strand2 in enumerate(self.strand):
                         region1 = self.regions[i].split("--")
@@ -1948,6 +1949,48 @@ class DNA_origami(QWidget):
                         constraint = None
                         if region1 == region2:
                             constraint = None
+
+                        else:
+                            flag = False
+
+                            if region1[-1] == region2[-1]:
+                                flag = True
+
+                            region1 = dict.fromkeys(region1)
+                            region2 = dict.fromkeys(region2[::-1])
+                            length = 1
+                            for key in region1.keys():
+                                region1[key] = f"{length}-{length + len(data[key]) - 1}"
+                                length += len(data[key])
+
+                            length += 3
+                            for key in region2.keys():
+                                region2[key] = f"{length}-{length + len(data[key]) - 1}"
+                                length += len(data[key])
+
+                            shared_list = [
+                                k for k in region1.keys() if k in region2.keys()
+                            ]
+
+                            if len(shared_list) < 2:
+                                for key in shared_list:
+                                    if constraint is None:
+                                        constraint = f"P {region1[key]} {region2[key]}"
+                                    else:
+                                        constraint += f"P {region1[key]} {region2[key]}"
+                            else:
+                                if flag:
+                                    _min = region1[shared_list[0]].split("-")[0]
+                                    _max = region2[shared_list[0]].split("-")[1]
+                                    constraint = f"P {_min}-{_max} {_min}-{_max}"
+                                else:
+                                    _min_i = region1[shared_list[0]].split("-")[0]
+                                    _max_i = region1[shared_list[-1]].split("-")[1]
+                                    _max_j = region2[shared_list[0]].split("-")[1]
+                                    _min_j = region2[shared_list[-1]].split("-")[0]
+                                    constraint = (
+                                        f"P {_min_i}-{_max_i} {_min_j}-{_max_j}"
+                                    )
 
                         mfold.run(
                             strand1, strand2, constraint, f"{i}_{j}.seq", f"{i}_{j}.aux"
@@ -1961,6 +2004,7 @@ class DNA_origami(QWidget):
                         except FileNotFoundError:
                             self.energy[i][j] = 0
 
+                del data
                 higher = 0
                 for i in range(len(self.energy)):
                     for j in range(len(self.energy)):
@@ -2104,15 +2148,66 @@ class DNA_origami(QWidget):
                         [None for strand1 in self.strand] for strand2 in self.strand
                     ]
 
+                    data = gc_content([], self)
                     for a, strand1 in enumerate(self.strand):
                         for b, strand2 in enumerate(self.strand):
-                            region1 = self.regions[i].split("--")
-                            region2 = self.regions[j].swapcase().split("--")
+                            region1 = self.regions[a].split("--")
+                            region2 = self.regions[b].swapcase().split("--")
                             region2 = region2[::-1]
 
                             constraint = None
                             if region1 == region2:
                                 constraint = None
+
+                            else:
+                                flag = False
+
+                                if region1[-1] == region2[-1]:
+                                    flag = True
+
+                                region1 = dict.fromkeys(region1)
+                                region2 = dict.fromkeys(region2[::-1])
+                                length = 1
+                                for key in region1.keys():
+                                    region1[
+                                        key
+                                    ] = f"{length}-{length + len(data[key]) - 1}"
+                                    length += len(data[key])
+
+                                length += 3
+                                for key in region2.keys():
+                                    region2[
+                                        key
+                                    ] = f"{length}-{length + len(data[key]) - 1}"
+                                    length += len(data[key])
+
+                                shared_list = [
+                                    k for k in region1.keys() if k in region2.keys()
+                                ]
+
+                                if len(shared_list) < 2:
+                                    for key in shared_list:
+                                        if constraint is None:
+                                            constraint = (
+                                                f"P {region1[key]} {region2[key]}"
+                                            )
+                                        else:
+                                            constraint += (
+                                                f"P {region1[key]} {region2[key]}"
+                                            )
+                                else:
+                                    if flag:
+                                        _min = region1[shared_list[0]].split("-")[0]
+                                        _max = region2[shared_list[0]].split("-")[1]
+                                        constraint = f"P {_min}-{_max} {_min}-{_max}"
+                                    else:
+                                        _min_i = region1[shared_list[0]].split("-")[0]
+                                        _max_i = region1[shared_list[-1]].split("-")[1]
+                                        _max_j = region2[shared_list[0]].split("-")[1]
+                                        _min_j = region2[shared_list[-1]].split("-")[0]
+                                        constraint = (
+                                            f"P {_min_i}-{_max_i} {_min_j}-{_max_j}"
+                                        )
 
                             mfold.run(
                                 strand1,
@@ -2134,6 +2229,7 @@ class DNA_origami(QWidget):
                     self.highlighted.clear()
                     self.index.clear()
                     self.shape.clear()
+                    del data
 
                     for _ in range(2):
                         intermediate_process(self)
@@ -2367,6 +2463,7 @@ class DNA_origami(QWidget):
                             [None for strand1 in self.strand] for strand2 in self.strand
                         ]
 
+                        data = gc_content([], self)
                         for i, strand1 in enumerate(self.strand):
                             for j, strand2 in enumerate(self.strand):
                                 region1 = self.regions[i].split("--")
@@ -2376,6 +2473,66 @@ class DNA_origami(QWidget):
                                 constraint = None
                                 if region1 == region2:
                                     constraint = None
+
+                                else:
+                                    flag = False
+
+                                    if region1[-1] == region2[-1]:
+                                        flag = True
+
+                                    region1 = dict.fromkeys(region1)
+                                    region2 = dict.fromkeys(region2[::-1])
+                                    length = 1
+                                    for key in region1.keys():
+                                        region1[
+                                            key
+                                        ] = f"{length}-{length + len(data[key]) - 1}"
+                                        length += len(data[key])
+
+                                    length += 3
+                                    for key in region2.keys():
+                                        region2[
+                                            key
+                                        ] = f"{length}-{length + len(data[key]) - 1}"
+                                        length += len(data[key])
+
+                                    shared_list = [
+                                        k for k in region1.keys() if k in region2.keys()
+                                    ]
+
+                                    if len(shared_list) < 2:
+                                        for key in shared_list:
+                                            if constraint is None:
+                                                constraint = (
+                                                    f"P {region1[key]} {region2[key]}"
+                                                )
+                                            else:
+                                                constraint += (
+                                                    f"P {region1[key]} {region2[key]}"
+                                                )
+                                    else:
+                                        if flag:
+                                            _min = region1[shared_list[0]].split("-")[0]
+                                            _max = region2[shared_list[0]].split("-")[1]
+                                            constraint = (
+                                                f"P {_min}-{_max} {_min}-{_max}"
+                                            )
+                                        else:
+                                            _min_i = region1[shared_list[0]].split("-")[
+                                                0
+                                            ]
+                                            _max_i = region1[shared_list[-1]].split(
+                                                "-"
+                                            )[1]
+                                            _max_j = region2[shared_list[0]].split("-")[
+                                                1
+                                            ]
+                                            _min_j = region2[shared_list[-1]].split(
+                                                "-"
+                                            )[0]
+                                            constraint = (
+                                                f"P {_min_i}-{_max_i} {_min_j}-{_max_j}"
+                                            )
 
                                 mfold.run(
                                     strand1,
@@ -2395,6 +2552,7 @@ class DNA_origami(QWidget):
                                 except FileNotFoundError:
                                     self.energy[i][j] = 0
 
+                        del data
                         higher = 0
                         for i in range(len(self.energy)):
                             for j in range(len(self.energy)):
