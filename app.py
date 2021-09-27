@@ -1327,24 +1327,72 @@ class DNA_origami(QWidget):
                         length += len(data[key])
 
                     shared_list = [k for k in region1.keys() if k in region2.keys()]
+                    complementary_1 = [
+                        (k, k.swapcase())
+                        for k in region1.keys()
+                        if k.swapcase() in region1.keys()
+                    ]
+                    complementary_2 = [
+                        (k, k.swapcase())
+                        for k in region2.keys()
+                        if k.swapcase() in region2.keys()
+                    ]
+
+                    # if len(complementary_1) >= 2:
+                    #     complementary_1.pop(-1)
+
+                    # if len(complementary_2) >= 2:
+                    #     complementary_2.pop(-1)
 
                     if len(shared_list) < 2:
                         for key in shared_list:
                             if constraint is None:
-                                constraint = f"P {region1[key]} {region2[key]}"
+                                constraint = f"P {region1[key]} {region2[key]}\n"
+                                for value in complementary_1:
+                                    constraint += (
+                                        f"P {region1[value[0]]} {region1[value[1]]}\n"
+                                    )
+                                for value in complementary_2:
+                                    constraint += (
+                                        f"P {region2[value[0]]} {region2[value[1]]}\n"
+                                    )
                             else:
-                                constraint += f"P {region1[key]} {region2[key]}"
+                                constraint += f"P {region1[key]} {region2[key]}\n"
+                                for value in complementary_1:
+                                    constraint += (
+                                        f"P {region1[value[0]]} {region1[value[1]]}\n"
+                                    )
+                                for value in complementary_2:
+                                    constraint += (
+                                        f"P {region2[value[0]]} {region2[value[1]]}\n"
+                                    )
                     else:
                         if flag:
                             _min = region1[shared_list[0]].split("-")[0]
                             _max = region2[shared_list[0]].split("-")[1]
-                            constraint = f"P {_min}-{_max} {_min}-{_max}"
+                            constraint = f"P {_min}-{_max} {_min}-{_max}\n"
+                            for value in complementary_1:
+                                constraint += (
+                                    f"P {region1[value[0]]} {region1[value[1]]}\n"
+                                )
+                            for value in complementary_2:
+                                constraint += (
+                                    f"P {region2[value[0]]} {region2[value[1]]}\n"
+                                )
                         else:
                             _min_i = region1[shared_list[0]].split("-")[0]
                             _max_i = region1[shared_list[-1]].split("-")[1]
                             _max_j = region2[shared_list[0]].split("-")[1]
                             _min_j = region2[shared_list[-1]].split("-")[0]
-                            constraint = f"P {_min_i}-{_max_i} {_min_j}-{_max_j}"
+                            constraint = f"P {_min_i}-{_max_i} {_min_j}-{_max_j}\n"
+                            for value in complementary_1:
+                                constraint += (
+                                    f"P {region1[value[0]]} {region1[value[1]]}\n"
+                                )
+                            for value in complementary_2:
+                                constraint += (
+                                    f"P {region2[value[0]]} {region2[value[1]]}\n"
+                                )
 
                 mfold.run(strand1, strand2, constraint, f"{i}_{j}.seq", f"{i}_{j}.aux")
                 try:
@@ -1971,26 +2019,62 @@ class DNA_origami(QWidget):
                             shared_list = [
                                 k for k in region1.keys() if k in region2.keys()
                             ]
+                            complementary_1 = [
+                                (k, k.swapcase())
+                                for k in region1.keys()
+                                if k.swapcase() in region1.keys()
+                            ]
+                            complementary_2 = [
+                                (k, k.swapcase())
+                                for k in region2.keys()
+                                if k.swapcase() in region2.keys()
+                            ]
+
+                            # if len(complementary_1) >= 2:
+                            #     complementary_1.pop(-1)
+
+                            # if len(complementary_2) >= 2:
+                            #     complementary_2.pop(-1)
 
                             if len(shared_list) < 2:
                                 for key in shared_list:
                                     if constraint is None:
-                                        constraint = f"P {region1[key]} {region2[key]}"
+                                        constraint = (
+                                            f"P {region1[key]} {region2[key]}\n"
+                                        )
+                                        for value in complementary_1:
+                                            constraint += f"P {region1[value[0]]} {region1[value[1]]}\n"
+                                        for value in complementary_2:
+                                            constraint += f"P {region2[value[0]]} {region2[value[1]]}\n"
                                     else:
-                                        constraint += f"P {region1[key]} {region2[key]}"
+                                        constraint += (
+                                            f"P {region1[key]} {region2[key]}\n"
+                                        )
+                                        for value in complementary_1:
+                                            constraint += f"P {region1[value[0]]} {region1[value[1]]}\n"
+                                        for value in complementary_2:
+                                            constraint += f"P {region2[value[0]]} {region2[value[1]]}\n"
                             else:
                                 if flag:
                                     _min = region1[shared_list[0]].split("-")[0]
                                     _max = region2[shared_list[0]].split("-")[1]
-                                    constraint = f"P {_min}-{_max} {_min}-{_max}"
+                                    constraint = f"P {_min}-{_max} {_min}-{_max}\n"
+                                    for value in complementary_1:
+                                        constraint += f"P {region1[value[0]]} {region1[value[1]]}\n"
+                                    for value in complementary_2:
+                                        constraint += f"P {region2[value[0]]} {region2[value[1]]}\n"
                                 else:
                                     _min_i = region1[shared_list[0]].split("-")[0]
                                     _max_i = region1[shared_list[-1]].split("-")[1]
                                     _max_j = region2[shared_list[0]].split("-")[1]
                                     _min_j = region2[shared_list[-1]].split("-")[0]
                                     constraint = (
-                                        f"P {_min_i}-{_max_i} {_min_j}-{_max_j}"
+                                        f"P {_min_i}-{_max_i} {_min_j}-{_max_j}\n"
                                     )
+                                    for value in complementary_1:
+                                        constraint += f"P {region1[value[0]]} {region1[value[1]]}\n"
+                                    for value in complementary_2:
+                                        constraint += f"P {region2[value[0]]} {region2[value[1]]}\n"
 
                         mfold.run(
                             strand1, strand2, constraint, f"{i}_{j}.seq", f"{i}_{j}.aux"
@@ -2184,30 +2268,62 @@ class DNA_origami(QWidget):
                                 shared_list = [
                                     k for k in region1.keys() if k in region2.keys()
                                 ]
+                                complementary_1 = [
+                                    (k, k.swapcase())
+                                    for k in region1.keys()
+                                    if k.swapcase() in region1.keys()
+                                ]
+                                complementary_2 = [
+                                    (k, k.swapcase())
+                                    for k in region2.keys()
+                                    if k.swapcase() in region2.keys()
+                                ]
+
+                                # if len(complementary_1) >= 2:
+                                #     complementary_1.pop(-1)
+
+                                # if len(complementary_2) >= 2:
+                                #     complementary_2.pop(-1)
 
                                 if len(shared_list) < 2:
                                     for key in shared_list:
                                         if constraint is None:
                                             constraint = (
-                                                f"P {region1[key]} {region2[key]}"
+                                                f"P {region1[key]} {region2[key]}\n"
                                             )
+                                            for value in complementary_1:
+                                                constraint += f"P {region1[value[0]]} {region1[value[1]]}\n"
+                                            for value in complementary_2:
+                                                constraint += f"P {region2[value[0]]} {region2[value[1]]}\n"
                                         else:
                                             constraint += (
-                                                f"P {region1[key]} {region2[key]}"
+                                                f"P {region1[key]} {region2[key]}\n"
                                             )
+                                            for value in complementary_1:
+                                                constraint += f"P {region1[value[0]]} {region1[value[1]]}\n"
+                                            for value in complementary_2:
+                                                constraint += f"P {region2[value[0]]} {region2[value[1]]}\n"
                                 else:
                                     if flag:
                                         _min = region1[shared_list[0]].split("-")[0]
                                         _max = region2[shared_list[0]].split("-")[1]
-                                        constraint = f"P {_min}-{_max} {_min}-{_max}"
+                                        constraint = f"P {_min}-{_max} {_min}-{_max}\n"
+                                        for value in complementary_1:
+                                            constraint += f"P {region1[value[0]]} {region1[value[1]]}\n"
+                                        for value in complementary_2:
+                                            constraint += f"P {region2[value[0]]} {region2[value[1]]}\n"
                                     else:
                                         _min_i = region1[shared_list[0]].split("-")[0]
                                         _max_i = region1[shared_list[-1]].split("-")[1]
                                         _max_j = region2[shared_list[0]].split("-")[1]
                                         _min_j = region2[shared_list[-1]].split("-")[0]
                                         constraint = (
-                                            f"P {_min_i}-{_max_i} {_min_j}-{_max_j}"
+                                            f"P {_min_i}-{_max_i} {_min_j}-{_max_j}\n"
                                         )
+                                        for value in complementary_1:
+                                            constraint += f"P {region1[value[0]]} {region1[value[1]]}\n"
+                                        for value in complementary_2:
+                                            constraint += f"P {region2[value[0]]} {region2[value[1]]}\n"
 
                             mfold.run(
                                 strand1,
@@ -2500,23 +2616,52 @@ class DNA_origami(QWidget):
                                         k for k in region1.keys() if k in region2.keys()
                                     ]
 
+                                    complementary_1 = [
+                                        (k, k.swapcase())
+                                        for k in region1.keys()
+                                        if k.swapcase() in region1.keys()
+                                    ]
+                                    complementary_2 = [
+                                        (k, k.swapcase())
+                                        for k in region2.keys()
+                                        if k.swapcase() in region2.keys()
+                                    ]
+
+                                    # if len(complementary_1) >= 2:
+                                    #     complementary_1.pop(-1)
+
+                                    # if len(complementary_2) >= 2:
+                                    #     complementary_2.pop(-1)
+
                                     if len(shared_list) < 2:
                                         for key in shared_list:
                                             if constraint is None:
                                                 constraint = (
-                                                    f"P {region1[key]} {region2[key]}"
+                                                    f"P {region1[key]} {region2[key]}\n"
                                                 )
+                                                for value in complementary_1:
+                                                    constraint += f"P {region1[value[0]]} {region1[value[1]]}\n"
+                                                for value in complementary_2:
+                                                    constraint += f"P {region2[value[0]]} {region2[value[1]]}\n"
                                             else:
                                                 constraint += (
-                                                    f"P {region1[key]} {region2[key]}"
+                                                    f"P {region1[key]} {region2[key]}\n"
                                                 )
+                                                for value in complementary_1:
+                                                    constraint += f"P {region1[value[0]]} {region1[value[1]]}\n"
+                                                for value in complementary_2:
+                                                    constraint += f"P {region2[value[0]]} {region2[value[1]]}\n"
                                     else:
                                         if flag:
                                             _min = region1[shared_list[0]].split("-")[0]
                                             _max = region2[shared_list[0]].split("-")[1]
                                             constraint = (
-                                                f"P {_min}-{_max} {_min}-{_max}"
+                                                f"P {_min}-{_max} {_min}-{_max}\n"
                                             )
+                                            for value in complementary_1:
+                                                constraint += f"P {region1[value[0]]} {region1[value[1]]}\n"
+                                            for value in complementary_2:
+                                                constraint += f"P {region2[value[0]]} {region2[value[1]]}\n"
                                         else:
                                             _min_i = region1[shared_list[0]].split("-")[
                                                 0
@@ -2530,9 +2675,11 @@ class DNA_origami(QWidget):
                                             _min_j = region2[shared_list[-1]].split(
                                                 "-"
                                             )[0]
-                                            constraint = (
-                                                f"P {_min_i}-{_max_i} {_min_j}-{_max_j}"
-                                            )
+                                            constraint = f"P {_min_i}-{_max_i} {_min_j}-{_max_j}\n"
+                                            for value in complementary_1:
+                                                constraint += f"P {region1[value[0]]} {region1[value[1]]}\n"
+                                            for value in complementary_2:
+                                                constraint += f"P {region2[value[0]]} {region2[value[1]]}\n"
 
                                 mfold.run(
                                     strand1,
