@@ -34,6 +34,14 @@ from genetic import Sequence
 # Import mfold required libraries
 from mfold_library import Mfold, Region
 
+# To do:
+# Fix multiple checks blocking calculations
+# show structure window
+# Fix repeated regions
+# Check for more than 10 A/T in a row and 6 C/G in a row
+# Button to export strands
+# Exception for fixed regions (move to second highest)
+
 
 def clear_files():
     """
@@ -683,10 +691,26 @@ class DNA_origami(QWidget):
         self.btn9.setStyleSheet(
             "QPushButton {background-color: #007bff; color: white; border: 5px solid transparent; border-radius: 5px}"
         )
+        self.btn10 = QPushButton("Show structure")
+        self.btn10.setFixedSize(150, 70)
+        self.btn10.setIconSize(QSize(30, 30))
+        self.btn10.setStyleSheet(
+            "QPushButton {background-color: #007bff; color: white; border: 5px solid transparent; border-radius: 5px}"
+        )
+        self.btn11 = QPushButton("Export oligos")
+        self.btn11.setFixedSize(150, 70)
+        self.btn11.setIcon(QIcon("assets/download-solid.svg"))
+        self.btn11.setIconSize(QSize(30, 30))
+        self.btn11.setStyleSheet(
+            "QPushButton {background-color: #007bff; color: white; border: 5px solid transparent; border-radius: 5px}"
+        )
         self.btn5.clicked.connect(self.load)
         self.btn7.clicked.connect(self.output_data)
         self.btn8.clicked.connect(self.randomize_strand)
         self.btn9.clicked.connect(self.loop_calculation)
+        self.btn10.clicked.connect(self.display_structure)
+        self.btn11.clicked.connect(self.export_oligos)
+
         self.tabs = QTabWidget()
         self.tabs.setFixedSize(500, 570)
 
@@ -712,7 +736,7 @@ class DNA_origami(QWidget):
 
         temp_bottom = QHBoxLayout()
         self.top_layout = QHBoxLayout()
-        self.top_layout.setSpacing(150)
+        self.top_layout.setSpacing(30)
         self.center_layout = QFormLayout()
         self.bottom_layout = QHBoxLayout()
         temp_vertical = QVBoxLayout()
@@ -720,12 +744,16 @@ class DNA_origami(QWidget):
         self.right_side = QVBoxLayout()
         self.left_side = QVBoxLayout()
         self.top_layout.addWidget(self.btn1)
+        self.top_layout.addWidget(self.btn10)
         self.top_layout.addWidget(self.btn2)
         temp_vertical.addWidget(self.btn8)
         temp_vertical.addWidget(self.btn9)
         self.bottom_layout.addLayout(temp_vertical)
         self.bottom_layout.addWidget(self.btn3)
-        self.bottom_layout.addWidget(self.btn4)
+        temp_export = QVBoxLayout()
+        temp_export.addWidget(self.btn4)
+        temp_export.addWidget(self.btn11)
+        self.bottom_layout.addLayout(temp_export)
         self.bottom_layout.addWidget(self.btn5)
         self.left_side.addLayout(self.top_layout)
 
@@ -1042,6 +1070,45 @@ class DNA_origami(QWidget):
                     error = QErrorMessage(self)
                     error.showMessage("Please give a positive value")
 
+    def export_oligos(self):
+        message = {}
+        for _ in range(len(self.regions)):
+            message[self.regions[_]] = self.strand[_].bases
+
+        window = QMessageBox()
+        reply = window.question(
+            self,
+            "Current strand/save current configuration",
+            "The current strand configuration is "
+            + "\n"
+            + str(json.dumps(message, indent=4))
+            + "\n"
+            + "Do you want to save this configuration ?",
+            QMessageBox.Yes | QMessageBox.No,
+            0,
+        )
+        QMessageBox.adjustSize(self)
+
+        if reply == QMessageBox.Yes:
+            filename = QFileDialog.getSaveFileName(
+                self,
+                "Save configuration",
+                "/bureau/dna-origami",
+            )
+
+            try:
+                export = {}
+                with open(str(filename[0] + ".dat"), "w") as configfile:
+                    for key, value in message.items():
+                        key = key.replace("--", "")
+                        export[key] = value
+
+                    yaml.dump(export, configfile)
+            except FileNotFoundError:
+                pass
+        else:
+            pass
+
     def export(self):
         """
         This function is used to export the current configuration and respects the upload format required by the application.
@@ -1106,6 +1173,16 @@ class DNA_origami(QWidget):
                 pass
         else:
             pass
+
+    def display_structure(self):
+        window = QMessageBox()
+        reply = window.question(
+            self,
+            "Current structure is",
+            str(self.raw_structure),
+            QMessageBox.Close,
+            0,
+        )
 
     def load(self):
         """
@@ -1395,14 +1472,14 @@ class DNA_origami(QWidget):
                                 )
 
                 mfold.run(strand1, strand2, constraint, f"{i}_{j}.seq", f"{i}_{j}.aux")
-                try:
-                    with open(f"{i}_{j}.det", "r") as configfile:
-                        for line in configfile:
-                            if line.startswith(" dG = "):
-                                self.energy[i][j] = abs(float(line[10:15]))
-                                break
-                except FileNotFoundError:
-                    self.energy[i][j] = 0
+                # try:
+                with open(f"{i}_{j}.det", "r") as configfile:
+                    for line in configfile:
+                        if line.startswith(" dG = "):
+                            self.energy[i][j] = abs(float(line[10:15]))
+                            break
+                # except FileNotFoundError:
+                # self.energy[i][j] = 0
 
         if not self.automate:
             self.progress.setValue(100)
@@ -2079,14 +2156,14 @@ class DNA_origami(QWidget):
                         mfold.run(
                             strand1, strand2, constraint, f"{i}_{j}.seq", f"{i}_{j}.aux"
                         )
-                        try:
-                            with open(f"{i}_{j}.det", "r") as configfile:
-                                for line in configfile:
-                                    if line.startswith(" dG = "):
-                                        self.energy[i][j] = abs(float(line[10:15]))
-                                        break
-                        except FileNotFoundError:
-                            self.energy[i][j] = 0
+                        # try:
+                        with open(f"{i}_{j}.det", "r") as configfile:
+                            for line in configfile:
+                                if line.startswith(" dG = "):
+                                    self.energy[i][j] = abs(float(line[10:15]))
+                                    break
+                        # except FileNotFoundError:
+                        #     self.energy[i][j] = 0
 
                 del data
                 higher = 0
@@ -2332,14 +2409,14 @@ class DNA_origami(QWidget):
                                 f"{a}_{b}.seq",
                                 f"{a}_{b}.aux",
                             )
-                            try:
-                                with open(f"{a}_{b}.det", "r") as configfile:
-                                    for line in configfile:
-                                        if line.startswith(" dG = "):
-                                            self.energy[a][b] = abs(float(line[10:15]))
-                                            break
-                            except FileNotFoundError:
-                                self.energy[a][b] = 0
+                            # try:
+                            with open(f"{a}_{b}.det", "r") as configfile:
+                                for line in configfile:
+                                    if line.startswith(" dG = "):
+                                        self.energy[a][b] = abs(float(line[10:15]))
+                                        break
+                            # except FileNotFoundError:
+                            #     self.energy[a][b] = 0
 
                     find_thief(self)
                     self.highlighted.clear()
@@ -2688,16 +2765,14 @@ class DNA_origami(QWidget):
                                     f"{i}_{j}.seq",
                                     f"{i}_{j}.aux",
                                 )
-                                try:
-                                    with open(f"{i}_{j}.det", "r") as configfile:
-                                        for line in configfile:
-                                            if line.startswith(" dG = "):
-                                                self.energy[i][j] = abs(
-                                                    float(line[10:15])
-                                                )
-                                                break
-                                except FileNotFoundError:
-                                    self.energy[i][j] = 0
+                                # try:
+                                with open(f"{i}_{j}.det", "r") as configfile:
+                                    for line in configfile:
+                                        if line.startswith(" dG = "):
+                                            self.energy[i][j] = abs(float(line[10:15]))
+                                            break
+                                # except FileNotFoundError:
+                                #     self.energy[i][j] = 0
 
                         del data
                         higher = 0
