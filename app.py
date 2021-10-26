@@ -1,5 +1,4 @@
 import faulthandler
-import gc as garbage
 import json
 import os
 import random
@@ -36,11 +35,12 @@ from mfold_library import Mfold, Region
 
 # To do:
 # Fix multiple checks blocking calculations
-# show structure window
-# Fix repeated regions
+# show structure window V
+# Fix repeated regions V
 # Check for more than 10 A/T in a row and 6 C/G in a row
-# Button to export strands
+# Button to export strands V
 # Exception for fixed regions (move to second highest)
+# Zero energy error V
 
 
 def clear_files():
@@ -337,30 +337,39 @@ def gc_content(gc, self):
     """
     gc.clear()
     gci = 0
+    struct = {}
     temp = []
+    test = []
+    counter = 0
     for i in range(len(self.strand)):
         temp.append(self.strand[i].bases)
 
     full_sequence = "".join(temp)
 
+    for i in self.regions:
+        test += i.split("--")
+
+    for i in range(len(self.header)):
+        struct[self.header[i]] = self.population_size[i]
+
     counter = 0
     temp.clear()
     index = 0
     while counter < len(full_sequence):
-        temp.append(full_sequence[counter : counter + self.population_size[index]])
-        counter += self.population_size[index]
+        temp.append(full_sequence[counter : counter + struct[test[index]]])
+        counter += struct[test[index]]
         index += 1
 
-    for j, k in enumerate(temp):
+    data = dict()
+    for m in range(len(test)):
+        data[test[m]] = temp[m]
+
+    for j, k in data.items():
         for _ in k:
             if _ == "C" or _ == "G":
                 gci += 1
         gc.append(gci)
         gci = 0
-
-    data = dict()
-    for m in range(len(self.population_size)):
-        data[self.header[m]] = temp[m]
 
     return data
 
@@ -443,7 +452,7 @@ class GC_range_picker(QMainWindow):
         This event handler is called when the maximum value is picked from the range picker
         """
         self.label2.setText(f"max : {self.slider2.value()}")
-        self.parent().gc_max = self.slider2.value() / 100
+        self.parent().gc_max = self.slider2.value() / 10
 
 
 class Loop_input_widget(QMainWindow):
@@ -859,8 +868,9 @@ class DNA_origami(QWidget):
         for i, struct in enumerate(structure):
             region = ""
             for j in range(len(struct)):
-                self.header.append(str(struct[j]).split("'")[1])
-                temp.append(int(str(struct[j]).split(" ")[1].split(")")[0]))
+                if not str(struct[j]).split("'")[1] in self.header:
+                    self.header.append(str(struct[j]).split("'")[1])
+                    temp.append(int(str(struct[j]).split(" ")[1].split(")")[0]))
 
                 if j == 0:
                     region += str(struct[j]).split("'")[1]
@@ -882,6 +892,15 @@ class DNA_origami(QWidget):
 
                 self.strand[i].bases = bases
                 bases = ""
+
+        # counter = 0
+        # for i in range(len(self.strand)):
+        #     temp = self.strand[i].bases
+        #     while counter < len(self.strand[i].bases) + 10:
+        #         if temp[counter : counter + 10] == "AAAAAAAAAA":
+        #             temp[counter : counter + 10] = temp[counter : counter + 9] + "T"
+        #             self.strand[i].bases = temp
+        #     counter = 0
 
         data = gc_content(gc, self)
 
@@ -1415,12 +1434,6 @@ class DNA_origami(QWidget):
                         if k.swapcase() in region2.keys()
                     ]
 
-                    # if len(complementary_1) >= 2:
-                    #     complementary_1.pop(-1)
-
-                    # if len(complementary_2) >= 2:
-                    #     complementary_2.pop(-1)
-
                     if len(shared_list) < 2:
                         for key in shared_list:
                             if constraint is None:
@@ -1472,14 +1485,11 @@ class DNA_origami(QWidget):
                                 )
 
                 mfold.run(strand1, strand2, constraint, f"{i}_{j}.seq", f"{i}_{j}.aux")
-                # try:
                 with open(f"{i}_{j}.det", "r") as configfile:
                     for line in configfile:
                         if line.startswith(" dG = "):
                             self.energy[i][j] = abs(float(line[10:15]))
                             break
-                # except FileNotFoundError:
-                # self.energy[i][j] = 0
 
         if not self.automate:
             self.progress.setValue(100)
@@ -1704,7 +1714,6 @@ class DNA_origami(QWidget):
 
         if not self.automate:
             self.figure_generation()
-            garbage.collect()
 
         highlighted = []
         highlighted += self.highlighted
@@ -2107,12 +2116,6 @@ class DNA_origami(QWidget):
                                 if k.swapcase() in region2.keys()
                             ]
 
-                            # if len(complementary_1) >= 2:
-                            #     complementary_1.pop(-1)
-
-                            # if len(complementary_2) >= 2:
-                            #     complementary_2.pop(-1)
-
                             if len(shared_list) < 2:
                                 for key in shared_list:
                                     if constraint is None:
@@ -2156,14 +2159,12 @@ class DNA_origami(QWidget):
                         mfold.run(
                             strand1, strand2, constraint, f"{i}_{j}.seq", f"{i}_{j}.aux"
                         )
-                        # try:
+
                         with open(f"{i}_{j}.det", "r") as configfile:
                             for line in configfile:
                                 if line.startswith(" dG = "):
                                     self.energy[i][j] = abs(float(line[10:15]))
                                     break
-                        # except FileNotFoundError:
-                        #     self.energy[i][j] = 0
 
                 del data
                 higher = 0
@@ -2245,7 +2246,6 @@ class DNA_origami(QWidget):
             error.showMessage(
                 "Randomization failed, please run the randomization once again"
             )
-        garbage.collect()
 
     def loop_calculation(self):
         """
@@ -2356,12 +2356,6 @@ class DNA_origami(QWidget):
                                     if k.swapcase() in region2.keys()
                                 ]
 
-                                # if len(complementary_1) >= 2:
-                                #     complementary_1.pop(-1)
-
-                                # if len(complementary_2) >= 2:
-                                #     complementary_2.pop(-1)
-
                                 if len(shared_list) < 2:
                                     for key in shared_list:
                                         if constraint is None:
@@ -2409,14 +2403,11 @@ class DNA_origami(QWidget):
                                 f"{a}_{b}.seq",
                                 f"{a}_{b}.aux",
                             )
-                            # try:
                             with open(f"{a}_{b}.det", "r") as configfile:
                                 for line in configfile:
                                     if line.startswith(" dG = "):
                                         self.energy[a][b] = abs(float(line[10:15]))
                                         break
-                            # except FileNotFoundError:
-                            #     self.energy[a][b] = 0
 
                     find_thief(self)
                     self.highlighted.clear()
@@ -2426,8 +2417,6 @@ class DNA_origami(QWidget):
 
                     for _ in range(2):
                         intermediate_process(self)
-
-                    print(self.highlighted, self.index)
 
                     self.progress.setFormat("Randomizing")
 
@@ -2704,12 +2693,6 @@ class DNA_origami(QWidget):
                                         if k.swapcase() in region2.keys()
                                     ]
 
-                                    # if len(complementary_1) >= 2:
-                                    #     complementary_1.pop(-1)
-
-                                    # if len(complementary_2) >= 2:
-                                    #     complementary_2.pop(-1)
-
                                     if len(shared_list) < 2:
                                         for key in shared_list:
                                             if constraint is None:
@@ -2765,14 +2748,11 @@ class DNA_origami(QWidget):
                                     f"{i}_{j}.seq",
                                     f"{i}_{j}.aux",
                                 )
-                                # try:
                                 with open(f"{i}_{j}.det", "r") as configfile:
                                     for line in configfile:
                                         if line.startswith(" dG = "):
                                             self.energy[i][j] = abs(float(line[10:15]))
                                             break
-                                # except FileNotFoundError:
-                                #     self.energy[i][j] = 0
 
                         del data
                         higher = 0
@@ -2922,18 +2902,26 @@ class DNA_origami(QWidget):
                 orientation="vertical",
             )
 
-            matrix = self.energy
+            to_avoid = ""
             structure = {}
             for count in range(2):
                 higher = 0
-                for i in range(len(matrix)):
-                    for j in range(len(matrix)):
-                        if matrix[i][j] != None:
-                            if matrix[i][j] > higher:
-                                higher = matrix[i][j]
-                                structure[count] = {"x": i, "y": j}
+                for i in range(len(self.energy)):
+                    for j in range(len(self.energy)):
+                        if self.energy[i][j] != None:
+                            if to_avoid != "":
+                                if self.energy[i][j] > higher and (
+                                    i != int(to_avoid.split("-")[0])
+                                    or j != int(to_avoid.split("-")[1])
+                                ):
+                                    higher = self.energy[i][j]
+                                    structure[count] = {"x": i, "y": j}
+                            else:
+                                if self.energy[i][j] > higher:
+                                    higher = self.energy[i][j]
+                                    structure[count] = {"x": i, "y": j}
 
-                matrix[structure[count]["x"]][structure[count]["y"]] = 0
+                to_avoid = str(structure[count]["x"]) + "-" + str(structure[count]["y"])
 
             for _ in range(len(structure)):
                 ax.add_patch(
@@ -2972,5 +2960,4 @@ class DNA_origami(QWidget):
 if __name__ == "__main__":
     window = QApplication(sys.argv)
     view = DNA_origami()
-    garbage.enable()
     sys.exit(window.exec_())
