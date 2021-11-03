@@ -34,12 +34,12 @@ from genetic import Sequence
 from mfold_library import Mfold, Region
 
 # To do:
-# Fix multiple checks blocking calculations
+# Fix multiple checks blocking calculations V
 # show structure window V
 # Fix repeated regions V
-# Check for more than 10 A/T in a row and 6 C/G in a row
+# Check for more than 10 A/T in a row and 6 C/G in a row V
 # Button to export strands V
-# Exception for fixed regions (move to second highest)
+# Exception for fixed regions (move to second highest) V
 # Zero energy error V
 
 
@@ -88,27 +88,46 @@ def find_thief(self):
             if region1 == region2:
                 self.energy[i][j] = 0
 
-    data = {}
-    temp = {}
+    to_avoid = {}
+    tries = 0
     flag = False
-    matrix = self.energy
-    structure = {}
-    for count in range(2):
+    structure = []
+    count = 0
+    while count < 2:
         higher = 0
-        for i in range(len(matrix)):
-            for j in range(len(matrix)):
-                if matrix[i][j] != None:
-                    if temp != {}:
-                        if matrix[i][j] > higher:
-                            if temp["x"] != i or temp["y"] != j:
-                                higher = matrix[i][j]
-                                structure[count] = {"x": i, "y": j}
+        for i in range(len(self.energy)):
+            for j in range(len(self.energy)):
+                flag = False
+                region1 = self.regions[i].split("--")
+                region2 = self.regions[j].split("--")
+                for _ in region1:
+                    if _ in self.fixed_regions.keys():
+                        flag = True
+                for _ in region2:
+                    if _ in self.fixed_regions.keys():
+                        flag = True
+                if self.energy[i][j] != None and not flag:
+                    if to_avoid != {}:
+                        if self.energy[i][j] > higher and (
+                            to_avoid["x"] != i or to_avoid["y"] != j
+                        ):
+                            higher = self.energy[i][j]
+                            structure.append({"x": i, "y": j})
                     else:
-                        if matrix[i][j] > higher:
-                            higher = matrix[i][j]
-                            structure[count] = {"x": i, "y": j}
-        temp = structure[count]
+                        if self.energy[i][j] > higher:
+                            higher = self.energy[i][j]
+                            structure.append({"x": i, "y": j})
 
+        if higher != 0:
+            to_avoid = structure[-1]
+            count += 1
+
+        tries += 1
+        if tries > 5:
+            raise StopIteration
+
+    flag = False
+    data = {}
     for count in range(len(structure)):
         i = structure[count]["x"]
         j = structure[count]["y"]
@@ -218,6 +237,26 @@ def intermediate_process(self):
 
             for b in range(len(self.regions[strand1].split("--"))):
                 header.append(self.regions[strand1].split("--")[b])
+
+            # flag = False
+            # for _ in header:
+            #     if (
+            #         _ in self.fixed_regions.keys()
+            #         or _.swapcase() in self.fixed_regions.keys()
+            #     ):
+            #         for i in range(len(self.thief.columns)):
+            #             if (
+            #                 self.thief.loc["energy"][i] == temp
+            #                 and self.thief.loc["shape"][i] == transposed["shape"][a]
+            #             ):
+            #                 text = self.thief.columns.values.tolist()
+            #                 self.thief = self.thief.drop(labels=[text[i]], axis=1)
+            #                 flag = True
+            #                 break
+            #         break
+
+            # if flag:
+            #     break
 
             data = gc_content([], self)
             length = [len(data[header[_]]) for _ in range(len(header))]
@@ -365,9 +404,11 @@ def gc_content(gc, self):
         data[test[m]] = temp[m]
 
     for j, k in data.items():
-        for _ in k:
-            if _ == "C" or _ == "G":
-                gci += 1
+        # for _ in k:
+        #     if _ == "C" or _ == "G":
+        #         gci += 1
+        gci += k.count("G")
+        gci += k.count("C")
         gc.append(gci)
         gci = 0
 
@@ -543,6 +584,150 @@ class Loop_input_widget(QMainWindow):
         """
         self.label2.setText(f"max : {self.slider2.value()}")
         self.parent().gc_max = self.slider2.value() / 100
+
+
+class Export_message(QMainWindow):
+    def _init_(self, main):
+        super().__init__()
+        self.parent = main
+
+    def export(self):
+        self.setWindowTitle("Save current configuration")
+        self.main_layout = QWidget()
+        # self.main_layout.setFixedSize(700, 500)
+
+        self.scroll = QScrollArea()
+        self.scroll.setStyleSheet("border: none")
+        self.vbox = QVBoxLayout()
+        self._vbox = QVBoxLayout()
+        self.mygroup = QGroupBox()
+        self.mygroup.setStyleSheet("border: none")
+        self.mygroup.setLayout(self._vbox)
+        self.scroll.setWidget(self.mygroup)
+        self.scroll.setWidgetResizable(True)
+
+        self.yes = QPushButton("Confirm")
+        self.yes.clicked.connect(self.save_configuration)
+
+        strand = ""
+        data = gc_content([], self.parent())
+        ticks = self.parent().regions
+        for i in range(len(self.parent().strand)):
+            j = len(ticks[i].split("--"))
+            for _ in range(j):
+                if _ == 0:
+                    strand = str(data[ticks[i].split("--")[_]])
+                else:
+                    strand += "--" + str(data[ticks[i].split("--")[_]])
+
+            row = QLabel(f"{ticks[i]}: {strand}")
+            self._vbox.addWidget(row)
+
+        self.vbox.addWidget(self.scroll)
+        self.vbox.addWidget(self.yes)
+
+        self.main_layout.setLayout(self.vbox)
+
+        self.setCentralWidget(self.main_layout)
+        self.move(300, 150)
+        self.main_layout.adjustSize()
+        self.show()
+
+    def save_configuration(self):
+        filename = QFileDialog.getSaveFileName(
+            self,
+            "Save configuration",
+            "",
+        )
+
+        if str(filename[0]) != "":
+            params = {}
+
+            data = gc_content([], self.parent())
+            for i in range(len(self.parent().header)):
+                self.parent().input_sequence[self.parent().header[i]] = data[
+                    self.parent().header[i]
+                ]
+
+            params["raw_structure"] = self.parent().raw_structure
+            params["mfold_command"] = "./mfold_quik"
+            params["boltzmann_factor"] = 1
+            params["fixed_regions"] = self.parent().fixed_regions
+            params["input_sequence_definitions"] = self.parent().input_sequence
+            params["energy_matrix"] = self.parent().energy
+            try:
+                with open(str(filename[0] + ".dat"), "w") as configfile:
+                    yaml.dump(params, configfile)
+            except FileNotFoundError:
+                pass
+            self.close()
+        else:
+            error = QErrorMessage(self)
+            error.showMessage("Please provide a name for this file")
+
+
+class Export_oligos_message(QMainWindow):
+    def _init_(self, main):
+        super().__init__()
+        self.parent = main
+
+    def export(self):
+        self.setWindowTitle("Save current oligos")
+        self.main_layout = QWidget()
+
+        self.scroll = QScrollArea()
+        self.scroll.setStyleSheet("border: none")
+        self.vbox = QVBoxLayout()
+        self._vbox = QVBoxLayout()
+        self.mygroup = QGroupBox()
+        self.mygroup.setStyleSheet("border: none")
+        self.mygroup.setLayout(self._vbox)
+        self.scroll.setWidget(self.mygroup)
+        self.scroll.setWidgetResizable(True)
+
+        self.yes = QPushButton("Confirm")
+        self.yes.clicked.connect(self.save_configuration)
+
+        for i in range(len(self.parent().regions)):
+            row = QLabel(f"{self.parent().regions[i]}: {self.parent().strand[i].bases}")
+            self._vbox.addWidget(row)
+
+        self.vbox.addWidget(self.scroll)
+        self.vbox.addWidget(self.yes)
+
+        self.main_layout.setLayout(self.vbox)
+
+        self.setCentralWidget(self.main_layout)
+        self.move(300, 150)
+        self.main_layout.adjustSize()
+        self.show()
+
+    def save_configuration(self):
+        filename = QFileDialog.getSaveFileName(
+            self,
+            "Save configuration",
+            "",
+        )
+
+        if str(filename[0]) != "":
+            try:
+                message = {}
+                for i in range(len(self.parent().regions)):
+                    message[self.parent().regions[i]] = self.parent().strand[i].bases
+
+                export = {}
+                with open(str(filename[0] + ".dat"), "w") as configfile:
+                    for key, value in message.items():
+                        key = key.replace("--", "")
+                        export[key] = value
+
+                    yaml.dump(export, configfile)
+            except FileNotFoundError:
+                pass
+            self.close()
+        else:
+            error = QErrorMessage(self)
+            error.showMessage("Please provide a name for this file")
 
 
 class Paint_structure(QMainWindow):
@@ -893,14 +1078,22 @@ class DNA_origami(QWidget):
                 self.strand[i].bases = bases
                 bases = ""
 
-        # counter = 0
-        # for i in range(len(self.strand)):
-        #     temp = self.strand[i].bases
-        #     while counter < len(self.strand[i].bases) + 10:
-        #         if temp[counter : counter + 10] == "AAAAAAAAAA":
-        #             temp[counter : counter + 10] = temp[counter : counter + 9] + "T"
-        #             self.strand[i].bases = temp
-        #     counter = 0
+        counter = 0
+        for i in range(len(self.strand)):
+            temp = self.strand[i].bases
+            while temp.find("AAAAAAAAAA") != -1:
+                counter = temp.index("AAAAAAAAAA")
+                temp = temp[:counter] + "T" + temp[counter + 1 :]
+            while temp.find("TTTTTTTTTT") != -1:
+                counter = temp.index("TTTTTTTTTT")
+                temp = temp[:counter] + "A" + temp[counter + 1 :]
+            while temp.find("CCCCCC") != -1:
+                counter = temp.index("CCCCCC")
+                temp = temp[:counter] + "G" + temp[counter + 1 :]
+            while temp.find("GGGGGG") != -1:
+                counter = temp.index("GGGGGG")
+                temp = temp[:counter] + "C" + temp[counter + 1 :]
+            self.strand[i].bases = temp
 
         data = gc_content(gc, self)
 
@@ -1094,39 +1287,50 @@ class DNA_origami(QWidget):
         for _ in range(len(self.regions)):
             message[self.regions[_]] = self.strand[_].bases
 
-        window = QMessageBox()
-        reply = window.question(
-            self,
-            "Current strand/save current configuration",
-            "The current strand configuration is "
-            + "\n"
-            + str(json.dumps(message, indent=4))
-            + "\n"
-            + "Do you want to save this configuration ?",
-            QMessageBox.Yes | QMessageBox.No,
-            0,
-        )
-        QMessageBox.adjustSize(self)
-
-        if reply == QMessageBox.Yes:
-            filename = QFileDialog.getSaveFileName(
-                self,
-                "Save configuration",
-                "/bureau/dna-origami",
-            )
-
-            try:
-                export = {}
-                with open(str(filename[0] + ".dat"), "w") as configfile:
-                    for key, value in message.items():
-                        key = key.replace("--", "")
-                        export[key] = value
-
-                    yaml.dump(export, configfile)
-            except FileNotFoundError:
-                pass
+        if message != {}:
+            window = Export_oligos_message(self)
+            window.export()
         else:
-            pass
+            error = QErrorMessage(self)
+            error.showMessage("Please provide a configuration")
+
+        # message = {}
+        # for _ in range(len(self.regions)):
+        #     message[self.regions[_]] = self.strand[_].bases
+
+        # window = QMessageBox()
+        # reply = window.question(
+        #     self,
+        #     "Current strand/save current configuration",
+        #     "The current strand configuration is "
+        #     + "\n"
+        #     + str(json.dumps(message, indent=4))
+        #     + "\n"
+        #     + "Do you want to save this configuration ?",
+        #     QMessageBox.Yes | QMessageBox.No,
+        #     0,
+        # )
+        # QMessageBox.adjustSize(self)
+
+        # if reply == QMessageBox.Yes:
+        #     filename = QFileDialog.getSaveFileName(
+        #         self,
+        #         "Save configuration",
+        #         "/bureau/dna-origami",
+        #     )
+
+        #     try:
+        #         export = {}
+        #         with open(str(filename[0] + ".dat"), "w") as configfile:
+        #             for key, value in message.items():
+        #                 key = key.replace("--", "")
+        #                 export[key] = value
+
+        #             yaml.dump(export, configfile)
+        #     except FileNotFoundError:
+        #         pass
+        # else:
+        #     pass
 
     def export(self):
         """
@@ -1153,45 +1357,63 @@ class DNA_origami(QWidget):
                 else:
                     message[ticks[i]] += "--" + str(data[ticks[i].split("--")[_]])
 
-        window = QMessageBox()
-        reply = window.question(
-            self,
-            "Current strand/save current configuration",
-            "The current strand configuration is "
-            + "\n"
-            + str(json.dumps(message, indent=4))
-            + "\n"
-            + "Do you want to save this configuration ?",
-            QMessageBox.Yes | QMessageBox.No,
-            0,
-        )
-        QMessageBox.adjustSize(self)
-
-        if reply == QMessageBox.Yes:
-            filename = QFileDialog.getSaveFileName(
-                self,
-                "Save configuration",
-                "/bureau/dna-origami",
-            )
-            params = {}
-
-            data = gc_content([], self)
-            for i in range(len(self.header)):
-                self.input_sequence[self.header[i]] = data[self.header[i]]
-
-            params["raw_structure"] = self.raw_structure
-            params["mfold_command"] = "./mfold_quik"
-            params["boltzmann_factor"] = 1
-            params["fixed_regions"] = self.fixed_regions
-            params["input_sequence_definitions"] = self.input_sequence
-            params["energy_matrix"] = self.energy
-            try:
-                with open(str(filename[0] + ".dat"), "w") as configfile:
-                    yaml.dump(params, configfile)
-            except FileNotFoundError:
-                pass
+        if message != {}:
+            window = Export_message(self)
+            window.export()
         else:
-            pass
+            error = QErrorMessage(self)
+            error.showMessage("Please provide a configuration")
+
+        # message = {}
+        # data = gc_content([], self)
+        # ticks = self.regions
+        # for i in range(len(self.strand)):
+        #     j = len(ticks[i].split("--"))
+        #     for _ in range(j):
+        #         if _ == 0:
+        #             message[ticks[i]] = str(data[ticks[i].split("--")[_]])
+        #         else:
+        #             message[ticks[i]] += "--" + str(data[ticks[i].split("--")[_]])
+
+        # window = QMessageBox()
+        # reply = window.question(
+        #     self,
+        #     "Current strand/save current configuration",
+        #     "The current strand configuration is "
+        #     + "\n"
+        #     + str(json.dumps(message, indent=4))
+        #     + "\n"
+        #     + "Do you want to save this configuration ?",
+        #     QMessageBox.Yes | QMessageBox.No,
+        #     0,
+        # )
+        # QMessageBox.adjustSize(self)
+
+        # if reply == QMessageBox.Yes:
+        #     filename = QFileDialog.getSaveFileName(
+        #         self,
+        #         "Save configuration",
+        #         "/bureau/dna-origami",
+        #     )
+        #     params = {}
+
+        #     data = gc_content([], self)
+        #     for i in range(len(self.header)):
+        #         self.input_sequence[self.header[i]] = data[self.header[i]]
+
+        #     params["raw_structure"] = self.raw_structure
+        #     params["mfold_command"] = "./mfold_quik"
+        #     params["boltzmann_factor"] = 1
+        #     params["fixed_regions"] = self.fixed_regions
+        #     params["input_sequence_definitions"] = self.input_sequence
+        #     params["energy_matrix"] = self.energy
+        #     try:
+        #         with open(str(filename[0] + ".dat"), "w") as configfile:
+        #             yaml.dump(params, configfile)
+        #     except FileNotFoundError:
+        #         pass
+        # else:
+        #     pass
 
     def display_structure(self):
         window = QMessageBox()
@@ -1304,20 +1526,38 @@ class DNA_origami(QWidget):
             error.showMessage("Please provide a structure")
             self.btn3.setEnabled(True)
 
-        elif self.header[index] in self.fixed_regions.keys():
-            error = QErrorMessage(self)
-            error.showMessage(
-                f"Please make sure to uncheck the field {self.header[index].lower()} to allow modifications"
-            )
-            self.btn3.setEnabled(True)
+        # elif self.header[index] in self.fixed_regions.keys():
+        #     error = QErrorMessage(self)
+        #     error.showMessage(
+        #         f"Please make sure to uncheck the field {self.header[index].lower()} to allow modifications"
+        #     )
+        #     self.btn3.setEnabled(True)
 
         else:
             if flag_range:
                 for i in range(len(self.field)):
                     self.field[i].setToolTip("")
 
-                self.run_calculation()
-                self.btn3.setEnabled(True)
+                try:
+                    self.run_calculation()
+                    find_thief(self)
+                    self.highlight_thief()
+                    clear_files()
+                    self.update()
+                    self.progress.setFormat("DONE")
+                    self.btn3.setEnabled(True)
+                except StopIteration:
+                    error = QErrorMessage(self)
+                    message = list(self.fixed_regions.keys())
+                    message = [x for x in message if x.islower()]
+                    message = ", ".join(message)
+                    error.showMessage(
+                        f"Please make sure to uncheck some of these fields: {message} to allow modifications"
+                    )
+                    self.progress.setFormat("DONE")
+                    self.progress.setValue(100)
+                    clear_files()
+                    self.btn3.setEnabled(True)
 
             else:
                 if gc[index] / self.population_size[index] < self.gc_min:
@@ -1493,12 +1733,6 @@ class DNA_origami(QWidget):
 
         if not self.automate:
             self.progress.setValue(100)
-
-        find_thief(self)
-        self.update()
-        self.highlight_thief()
-        self.progress.setFormat("DONE")
-        clear_files()
 
     def figure_generation(self):
         """
@@ -1709,7 +1943,7 @@ class DNA_origami(QWidget):
             self.field[i].setToolTip("")
             self.field[i].setStyleSheet("background-color:white")
 
-        for i in range(2):
+        while len(self.shape) < 2:
             intermediate_process(self)
 
         if not self.automate:
@@ -1836,7 +2070,22 @@ class DNA_origami(QWidget):
             temp = GC_range_picker(self)
             temp.input()
         else:
-            self.run_randomization()
+            try:
+                self.run_randomization()
+            except StopIteration:
+                error = QErrorMessage(self)
+                message = list(self.fixed_regions.keys())
+                message = [x for x in message if x.islower()]
+                message = ", ".join(message)
+                error.showMessage(
+                    f"Please make sure to uncheck some of these fields: {message} to allow modifications"
+                )
+                self.progress.setFormat("DONE")
+                self.progress.setValue(100)
+                self.update()
+                clear_files()
+                self.btn3.setEnabled(True)
+                self.btn8.setEnabled(True)
 
     def run_randomization(self):
         if self.highlighted == []:
@@ -2067,106 +2316,108 @@ class DNA_origami(QWidget):
                 self.progress.setFormat("Testing randomization")
 
                 self.btn3.setEnabled(False)
-                mfold = Mfold(output_folder="./", mfold_command="mfold_quik")
+                self.automate = True
+                self.run_calculation()
+                # mfold = Mfold(output_folder="./", mfold_command="mfold_quik")
 
-                self.energy = [
-                    [None for strand1 in self.strand] for strand2 in self.strand
-                ]
+                # self.energy = [
+                #     [None for strand1 in self.strand] for strand2 in self.strand
+                # ]
 
-                data = gc_content([], self)
-                for i, strand1 in enumerate(self.strand):
-                    for j, strand2 in enumerate(self.strand):
-                        region1 = self.regions[i].split("--")
-                        region2 = self.regions[j].swapcase().split("--")
-                        region2 = region2[::-1]
+                # data = gc_content([], self)
+                # for i, strand1 in enumerate(self.strand):
+                #     for j, strand2 in enumerate(self.strand):
+                #         region1 = self.regions[i].split("--")
+                #         region2 = self.regions[j].swapcase().split("--")
+                #         region2 = region2[::-1]
 
-                        constraint = None
-                        if region1 == region2:
-                            constraint = None
+                #         constraint = None
+                #         if region1 == region2:
+                #             constraint = None
 
-                        else:
-                            flag = False
+                #         else:
+                #             flag = False
 
-                            if region1[-1] == region2[-1]:
-                                flag = True
+                #             if region1[-1] == region2[-1]:
+                #                 flag = True
 
-                            region1 = dict.fromkeys(region1)
-                            region2 = dict.fromkeys(region2[::-1])
-                            length = 1
-                            for key in region1.keys():
-                                region1[key] = f"{length}-{length + len(data[key]) - 1}"
-                                length += len(data[key])
+                #             region1 = dict.fromkeys(region1)
+                #             region2 = dict.fromkeys(region2[::-1])
+                #             length = 1
+                #             for key in region1.keys():
+                #                 region1[key] = f"{length}-{length + len(data[key]) - 1}"
+                #                 length += len(data[key])
 
-                            length += 3
-                            for key in region2.keys():
-                                region2[key] = f"{length}-{length + len(data[key]) - 1}"
-                                length += len(data[key])
+                #             length += 3
+                #             for key in region2.keys():
+                #                 region2[key] = f"{length}-{length + len(data[key]) - 1}"
+                #                 length += len(data[key])
 
-                            shared_list = [
-                                k for k in region1.keys() if k in region2.keys()
-                            ]
-                            complementary_1 = [
-                                (k, k.swapcase())
-                                for k in region1.keys()
-                                if k.swapcase() in region1.keys()
-                            ]
-                            complementary_2 = [
-                                (k, k.swapcase())
-                                for k in region2.keys()
-                                if k.swapcase() in region2.keys()
-                            ]
+                #             shared_list = [
+                #                 k for k in region1.keys() if k in region2.keys()
+                #             ]
+                #             complementary_1 = [
+                #                 (k, k.swapcase())
+                #                 for k in region1.keys()
+                #                 if k.swapcase() in region1.keys()
+                #             ]
+                #             complementary_2 = [
+                #                 (k, k.swapcase())
+                #                 for k in region2.keys()
+                #                 if k.swapcase() in region2.keys()
+                #             ]
 
-                            if len(shared_list) < 2:
-                                for key in shared_list:
-                                    if constraint is None:
-                                        constraint = (
-                                            f"P {region1[key]} {region2[key]}\n"
-                                        )
-                                        for value in complementary_1:
-                                            constraint += f"P {region1[value[0]]} {region1[value[1]]}\n"
-                                        for value in complementary_2:
-                                            constraint += f"P {region2[value[0]]} {region2[value[1]]}\n"
-                                    else:
-                                        constraint += (
-                                            f"P {region1[key]} {region2[key]}\n"
-                                        )
-                                        for value in complementary_1:
-                                            constraint += f"P {region1[value[0]]} {region1[value[1]]}\n"
-                                        for value in complementary_2:
-                                            constraint += f"P {region2[value[0]]} {region2[value[1]]}\n"
-                            else:
-                                if flag:
-                                    _min = region1[shared_list[0]].split("-")[0]
-                                    _max = region2[shared_list[0]].split("-")[1]
-                                    constraint = f"P {_min}-{_max} {_min}-{_max}\n"
-                                    for value in complementary_1:
-                                        constraint += f"P {region1[value[0]]} {region1[value[1]]}\n"
-                                    for value in complementary_2:
-                                        constraint += f"P {region2[value[0]]} {region2[value[1]]}\n"
-                                else:
-                                    _min_i = region1[shared_list[0]].split("-")[0]
-                                    _max_i = region1[shared_list[-1]].split("-")[1]
-                                    _max_j = region2[shared_list[0]].split("-")[1]
-                                    _min_j = region2[shared_list[-1]].split("-")[0]
-                                    constraint = (
-                                        f"P {_min_i}-{_max_i} {_min_j}-{_max_j}\n"
-                                    )
-                                    for value in complementary_1:
-                                        constraint += f"P {region1[value[0]]} {region1[value[1]]}\n"
-                                    for value in complementary_2:
-                                        constraint += f"P {region2[value[0]]} {region2[value[1]]}\n"
+                #             if len(shared_list) < 2:
+                #                 for key in shared_list:
+                #                     if constraint is None:
+                #                         constraint = (
+                #                             f"P {region1[key]} {region2[key]}\n"
+                #                         )
+                #                         for value in complementary_1:
+                #                             constraint += f"P {region1[value[0]]} {region1[value[1]]}\n"
+                #                         for value in complementary_2:
+                #                             constraint += f"P {region2[value[0]]} {region2[value[1]]}\n"
+                #                     else:
+                #                         constraint += (
+                #                             f"P {region1[key]} {region2[key]}\n"
+                #                         )
+                #                         for value in complementary_1:
+                #                             constraint += f"P {region1[value[0]]} {region1[value[1]]}\n"
+                #                         for value in complementary_2:
+                #                             constraint += f"P {region2[value[0]]} {region2[value[1]]}\n"
+                #             else:
+                #                 if flag:
+                #                     _min = region1[shared_list[0]].split("-")[0]
+                #                     _max = region2[shared_list[0]].split("-")[1]
+                #                     constraint = f"P {_min}-{_max} {_min}-{_max}\n"
+                #                     for value in complementary_1:
+                #                         constraint += f"P {region1[value[0]]} {region1[value[1]]}\n"
+                #                     for value in complementary_2:
+                #                         constraint += f"P {region2[value[0]]} {region2[value[1]]}\n"
+                #                 else:
+                #                     _min_i = region1[shared_list[0]].split("-")[0]
+                #                     _max_i = region1[shared_list[-1]].split("-")[1]
+                #                     _max_j = region2[shared_list[0]].split("-")[1]
+                #                     _min_j = region2[shared_list[-1]].split("-")[0]
+                #                     constraint = (
+                #                         f"P {_min_i}-{_max_i} {_min_j}-{_max_j}\n"
+                #                     )
+                #                     for value in complementary_1:
+                #                         constraint += f"P {region1[value[0]]} {region1[value[1]]}\n"
+                #                     for value in complementary_2:
+                #                         constraint += f"P {region2[value[0]]} {region2[value[1]]}\n"
 
-                        mfold.run(
-                            strand1, strand2, constraint, f"{i}_{j}.seq", f"{i}_{j}.aux"
-                        )
+                #         mfold.run(
+                #             strand1, strand2, constraint, f"{i}_{j}.seq", f"{i}_{j}.aux"
+                #         )
 
-                        with open(f"{i}_{j}.det", "r") as configfile:
-                            for line in configfile:
-                                if line.startswith(" dG = "):
-                                    self.energy[i][j] = abs(float(line[10:15]))
-                                    break
+                #         with open(f"{i}_{j}.det", "r") as configfile:
+                #             for line in configfile:
+                #                 if line.startswith(" dG = "):
+                #                     self.energy[i][j] = abs(float(line[10:15]))
+                #                     break
 
-                del data
+                # del data
                 higher = 0
                 for i in range(len(self.energy)):
                     for j in range(len(self.energy)):
@@ -2228,6 +2479,10 @@ class DNA_origami(QWidget):
             self.automate = False
 
             self.run_calculation()
+            find_thief(self)
+            self.highlight_thief()
+            # clear_files()
+            self.update()
 
             self.progress.setFormat("DONE")
             self.btn3.setEnabled(True)
@@ -2260,8 +2515,32 @@ class DNA_origami(QWidget):
             temp = Loop_input_widget(self)
             temp.input()
         else:
-            self.run_loop()
-            clear_files()
+            try:
+                self.run_loop()
+                clear_files()
+            except StopIteration:
+                error = QErrorMessage(self)
+                message = list(self.fixed_regions.keys())
+                message = [x for x in message if x.islower()]
+                message = ", ".join(message)
+                error.showMessage(
+                    f"Please make sure to uncheck some of these fields: {message} to allow modifications"
+                )
+                self.progress.setFormat("DONE")
+                self.progress.setValue(100)
+                self.update()
+                clear_files()
+                self.highlighted.clear()
+                self.index.clear()
+                self.shape.clear()
+
+                self.file_counter = 0
+                self.iterator = 0
+                self.automate = False
+
+                self.btn3.setEnabled(True)
+                self.btn8.setEnabled(True)
+                self.btn9.setEnabled(True)
 
     def run_loop(self):
         """
@@ -2303,117 +2582,118 @@ class DNA_origami(QWidget):
 
                     self.automate = True
 
-                    mfold = Mfold(output_folder="./", mfold_command="mfold_quik")
+                    # mfold = Mfold(output_folder="./", mfold_command="mfold_quik")
 
-                    self.energy = [
-                        [None for strand1 in self.strand] for strand2 in self.strand
-                    ]
+                    # self.energy = [
+                    #     [None for strand1 in self.strand] for strand2 in self.strand
+                    # ]
 
-                    data = gc_content([], self)
-                    for a, strand1 in enumerate(self.strand):
-                        for b, strand2 in enumerate(self.strand):
-                            region1 = self.regions[a].split("--")
-                            region2 = self.regions[b].swapcase().split("--")
-                            region2 = region2[::-1]
+                    # data = gc_content([], self)
+                    # for a, strand1 in enumerate(self.strand):
+                    #     for b, strand2 in enumerate(self.strand):
+                    #         region1 = self.regions[a].split("--")
+                    #         region2 = self.regions[b].swapcase().split("--")
+                    #         region2 = region2[::-1]
 
-                            constraint = None
-                            if region1 == region2:
-                                constraint = None
+                    #         constraint = None
+                    #         if region1 == region2:
+                    #             constraint = None
 
-                            else:
-                                flag = False
+                    #         else:
+                    #             flag = False
 
-                                if region1[-1] == region2[-1]:
-                                    flag = True
+                    #             if region1[-1] == region2[-1]:
+                    #                 flag = True
 
-                                region1 = dict.fromkeys(region1)
-                                region2 = dict.fromkeys(region2[::-1])
-                                length = 1
-                                for key in region1.keys():
-                                    region1[
-                                        key
-                                    ] = f"{length}-{length + len(data[key]) - 1}"
-                                    length += len(data[key])
+                    #             region1 = dict.fromkeys(region1)
+                    #             region2 = dict.fromkeys(region2[::-1])
+                    #             length = 1
+                    #             for key in region1.keys():
+                    #                 region1[
+                    #                     key
+                    #                 ] = f"{length}-{length + len(data[key]) - 1}"
+                    #                 length += len(data[key])
 
-                                length += 3
-                                for key in region2.keys():
-                                    region2[
-                                        key
-                                    ] = f"{length}-{length + len(data[key]) - 1}"
-                                    length += len(data[key])
+                    #             length += 3
+                    #             for key in region2.keys():
+                    #                 region2[
+                    #                     key
+                    #                 ] = f"{length}-{length + len(data[key]) - 1}"
+                    #                 length += len(data[key])
 
-                                shared_list = [
-                                    k for k in region1.keys() if k in region2.keys()
-                                ]
-                                complementary_1 = [
-                                    (k, k.swapcase())
-                                    for k in region1.keys()
-                                    if k.swapcase() in region1.keys()
-                                ]
-                                complementary_2 = [
-                                    (k, k.swapcase())
-                                    for k in region2.keys()
-                                    if k.swapcase() in region2.keys()
-                                ]
+                    #             shared_list = [
+                    #                 k for k in region1.keys() if k in region2.keys()
+                    #             ]
+                    #             complementary_1 = [
+                    #                 (k, k.swapcase())
+                    #                 for k in region1.keys()
+                    #                 if k.swapcase() in region1.keys()
+                    #             ]
+                    #             complementary_2 = [
+                    #                 (k, k.swapcase())
+                    #                 for k in region2.keys()
+                    #                 if k.swapcase() in region2.keys()
+                    #             ]
 
-                                if len(shared_list) < 2:
-                                    for key in shared_list:
-                                        if constraint is None:
-                                            constraint = (
-                                                f"P {region1[key]} {region2[key]}\n"
-                                            )
-                                            for value in complementary_1:
-                                                constraint += f"P {region1[value[0]]} {region1[value[1]]}\n"
-                                            for value in complementary_2:
-                                                constraint += f"P {region2[value[0]]} {region2[value[1]]}\n"
-                                        else:
-                                            constraint += (
-                                                f"P {region1[key]} {region2[key]}\n"
-                                            )
-                                            for value in complementary_1:
-                                                constraint += f"P {region1[value[0]]} {region1[value[1]]}\n"
-                                            for value in complementary_2:
-                                                constraint += f"P {region2[value[0]]} {region2[value[1]]}\n"
-                                else:
-                                    if flag:
-                                        _min = region1[shared_list[0]].split("-")[0]
-                                        _max = region2[shared_list[0]].split("-")[1]
-                                        constraint = f"P {_min}-{_max} {_min}-{_max}\n"
-                                        for value in complementary_1:
-                                            constraint += f"P {region1[value[0]]} {region1[value[1]]}\n"
-                                        for value in complementary_2:
-                                            constraint += f"P {region2[value[0]]} {region2[value[1]]}\n"
-                                    else:
-                                        _min_i = region1[shared_list[0]].split("-")[0]
-                                        _max_i = region1[shared_list[-1]].split("-")[1]
-                                        _max_j = region2[shared_list[0]].split("-")[1]
-                                        _min_j = region2[shared_list[-1]].split("-")[0]
-                                        constraint = (
-                                            f"P {_min_i}-{_max_i} {_min_j}-{_max_j}\n"
-                                        )
-                                        for value in complementary_1:
-                                            constraint += f"P {region1[value[0]]} {region1[value[1]]}\n"
-                                        for value in complementary_2:
-                                            constraint += f"P {region2[value[0]]} {region2[value[1]]}\n"
+                    #             if len(shared_list) < 2:
+                    #                 for key in shared_list:
+                    #                     if constraint is None:
+                    #                         constraint = (
+                    #                             f"P {region1[key]} {region2[key]}\n"
+                    #                         )
+                    #                         for value in complementary_1:
+                    #                             constraint += f"P {region1[value[0]]} {region1[value[1]]}\n"
+                    #                         for value in complementary_2:
+                    #                             constraint += f"P {region2[value[0]]} {region2[value[1]]}\n"
+                    #                     else:
+                    #                         constraint += (
+                    #                             f"P {region1[key]} {region2[key]}\n"
+                    #                         )
+                    #                         for value in complementary_1:
+                    #                             constraint += f"P {region1[value[0]]} {region1[value[1]]}\n"
+                    #                         for value in complementary_2:
+                    #                             constraint += f"P {region2[value[0]]} {region2[value[1]]}\n"
+                    #             else:
+                    #                 if flag:
+                    #                     _min = region1[shared_list[0]].split("-")[0]
+                    #                     _max = region2[shared_list[0]].split("-")[1]
+                    #                     constraint = f"P {_min}-{_max} {_min}-{_max}\n"
+                    #                     for value in complementary_1:
+                    #                         constraint += f"P {region1[value[0]]} {region1[value[1]]}\n"
+                    #                     for value in complementary_2:
+                    #                         constraint += f"P {region2[value[0]]} {region2[value[1]]}\n"
+                    #                 else:
+                    #                     _min_i = region1[shared_list[0]].split("-")[0]
+                    #                     _max_i = region1[shared_list[-1]].split("-")[1]
+                    #                     _max_j = region2[shared_list[0]].split("-")[1]
+                    #                     _min_j = region2[shared_list[-1]].split("-")[0]
+                    #                     constraint = (
+                    #                         f"P {_min_i}-{_max_i} {_min_j}-{_max_j}\n"
+                    #                     )
+                    #                     for value in complementary_1:
+                    #                         constraint += f"P {region1[value[0]]} {region1[value[1]]}\n"
+                    #                     for value in complementary_2:
+                    #                         constraint += f"P {region2[value[0]]} {region2[value[1]]}\n"
 
-                            mfold.run(
-                                strand1,
-                                strand2,
-                                constraint,
-                                f"{a}_{b}.seq",
-                                f"{a}_{b}.aux",
-                            )
-                            with open(f"{a}_{b}.det", "r") as configfile:
-                                for line in configfile:
-                                    if line.startswith(" dG = "):
-                                        self.energy[a][b] = abs(float(line[10:15]))
-                                        break
-
+                    #         mfold.run(
+                    #             strand1,
+                    #             strand2,
+                    #             constraint,
+                    #             f"{a}_{b}.seq",
+                    #             f"{a}_{b}.aux",
+                    #         )
+                    #         with open(f"{a}_{b}.det", "r") as configfile:
+                    #             for line in configfile:
+                    #                 if line.startswith(" dG = "):
+                    #                     self.energy[a][b] = abs(float(line[10:15]))
+                    #                     break
+                    self.progress.setFormat("Calculating")
+                    self.run_calculation()
                     find_thief(self)
                     self.highlighted.clear()
                     self.index.clear()
                     self.shape.clear()
-                    del data
+                    # del data
 
                     for _ in range(2):
                         intermediate_process(self)
@@ -2639,122 +2919,124 @@ class DNA_origami(QWidget):
 
                         max = higher
 
-                        mfold = Mfold(output_folder="./", mfold_command="mfold_quik")
+                        self.automate = True
+                        self.run_calculation()
+                        # mfold = Mfold(output_folder="./", mfold_command="mfold_quik")
 
-                        self.energy = [
-                            [None for strand1 in self.strand] for strand2 in self.strand
-                        ]
+                        # self.energy = [
+                        #     [None for strand1 in self.strand] for strand2 in self.strand
+                        # ]
 
-                        data = gc_content([], self)
-                        for i, strand1 in enumerate(self.strand):
-                            for j, strand2 in enumerate(self.strand):
-                                region1 = self.regions[i].split("--")
-                                region2 = self.regions[j].swapcase().split("--")
-                                region2 = region2[::-1]
+                        # data = gc_content([], self)
+                        # for i, strand1 in enumerate(self.strand):
+                        #     for j, strand2 in enumerate(self.strand):
+                        #         region1 = self.regions[i].split("--")
+                        #         region2 = self.regions[j].swapcase().split("--")
+                        #         region2 = region2[::-1]
 
-                                constraint = None
-                                if region1 == region2:
-                                    constraint = None
+                        #         constraint = None
+                        #         if region1 == region2:
+                        #             constraint = None
 
-                                else:
-                                    flag = False
+                        #         else:
+                        #             flag = False
 
-                                    if region1[-1] == region2[-1]:
-                                        flag = True
+                        #             if region1[-1] == region2[-1]:
+                        #                 flag = True
 
-                                    region1 = dict.fromkeys(region1)
-                                    region2 = dict.fromkeys(region2[::-1])
-                                    length = 1
-                                    for key in region1.keys():
-                                        region1[
-                                            key
-                                        ] = f"{length}-{length + len(data[key]) - 1}"
-                                        length += len(data[key])
+                        #             region1 = dict.fromkeys(region1)
+                        #             region2 = dict.fromkeys(region2[::-1])
+                        #             length = 1
+                        #             for key in region1.keys():
+                        #                 region1[
+                        #                     key
+                        #                 ] = f"{length}-{length + len(data[key]) - 1}"
+                        #                 length += len(data[key])
 
-                                    length += 3
-                                    for key in region2.keys():
-                                        region2[
-                                            key
-                                        ] = f"{length}-{length + len(data[key]) - 1}"
-                                        length += len(data[key])
+                        #             length += 3
+                        #             for key in region2.keys():
+                        #                 region2[
+                        #                     key
+                        #                 ] = f"{length}-{length + len(data[key]) - 1}"
+                        #                 length += len(data[key])
 
-                                    shared_list = [
-                                        k for k in region1.keys() if k in region2.keys()
-                                    ]
+                        #             shared_list = [
+                        #                 k for k in region1.keys() if k in region2.keys()
+                        #             ]
 
-                                    complementary_1 = [
-                                        (k, k.swapcase())
-                                        for k in region1.keys()
-                                        if k.swapcase() in region1.keys()
-                                    ]
-                                    complementary_2 = [
-                                        (k, k.swapcase())
-                                        for k in region2.keys()
-                                        if k.swapcase() in region2.keys()
-                                    ]
+                        #             complementary_1 = [
+                        #                 (k, k.swapcase())
+                        #                 for k in region1.keys()
+                        #                 if k.swapcase() in region1.keys()
+                        #             ]
+                        #             complementary_2 = [
+                        #                 (k, k.swapcase())
+                        #                 for k in region2.keys()
+                        #                 if k.swapcase() in region2.keys()
+                        #             ]
 
-                                    if len(shared_list) < 2:
-                                        for key in shared_list:
-                                            if constraint is None:
-                                                constraint = (
-                                                    f"P {region1[key]} {region2[key]}\n"
-                                                )
-                                                for value in complementary_1:
-                                                    constraint += f"P {region1[value[0]]} {region1[value[1]]}\n"
-                                                for value in complementary_2:
-                                                    constraint += f"P {region2[value[0]]} {region2[value[1]]}\n"
-                                            else:
-                                                constraint += (
-                                                    f"P {region1[key]} {region2[key]}\n"
-                                                )
-                                                for value in complementary_1:
-                                                    constraint += f"P {region1[value[0]]} {region1[value[1]]}\n"
-                                                for value in complementary_2:
-                                                    constraint += f"P {region2[value[0]]} {region2[value[1]]}\n"
-                                    else:
-                                        if flag:
-                                            _min = region1[shared_list[0]].split("-")[0]
-                                            _max = region2[shared_list[0]].split("-")[1]
-                                            constraint = (
-                                                f"P {_min}-{_max} {_min}-{_max}\n"
-                                            )
-                                            for value in complementary_1:
-                                                constraint += f"P {region1[value[0]]} {region1[value[1]]}\n"
-                                            for value in complementary_2:
-                                                constraint += f"P {region2[value[0]]} {region2[value[1]]}\n"
-                                        else:
-                                            _min_i = region1[shared_list[0]].split("-")[
-                                                0
-                                            ]
-                                            _max_i = region1[shared_list[-1]].split(
-                                                "-"
-                                            )[1]
-                                            _max_j = region2[shared_list[0]].split("-")[
-                                                1
-                                            ]
-                                            _min_j = region2[shared_list[-1]].split(
-                                                "-"
-                                            )[0]
-                                            constraint = f"P {_min_i}-{_max_i} {_min_j}-{_max_j}\n"
-                                            for value in complementary_1:
-                                                constraint += f"P {region1[value[0]]} {region1[value[1]]}\n"
-                                            for value in complementary_2:
-                                                constraint += f"P {region2[value[0]]} {region2[value[1]]}\n"
+                        #             if len(shared_list) < 2:
+                        #                 for key in shared_list:
+                        #                     if constraint is None:
+                        #                         constraint = (
+                        #                             f"P {region1[key]} {region2[key]}\n"
+                        #                         )
+                        #                         for value in complementary_1:
+                        #                             constraint += f"P {region1[value[0]]} {region1[value[1]]}\n"
+                        #                         for value in complementary_2:
+                        #                             constraint += f"P {region2[value[0]]} {region2[value[1]]}\n"
+                        #                     else:
+                        #                         constraint += (
+                        #                             f"P {region1[key]} {region2[key]}\n"
+                        #                         )
+                        #                         for value in complementary_1:
+                        #                             constraint += f"P {region1[value[0]]} {region1[value[1]]}\n"
+                        #                         for value in complementary_2:
+                        #                             constraint += f"P {region2[value[0]]} {region2[value[1]]}\n"
+                        #             else:
+                        #                 if flag:
+                        #                     _min = region1[shared_list[0]].split("-")[0]
+                        #                     _max = region2[shared_list[0]].split("-")[1]
+                        #                     constraint = (
+                        #                         f"P {_min}-{_max} {_min}-{_max}\n"
+                        #                     )
+                        #                     for value in complementary_1:
+                        #                         constraint += f"P {region1[value[0]]} {region1[value[1]]}\n"
+                        #                     for value in complementary_2:
+                        #                         constraint += f"P {region2[value[0]]} {region2[value[1]]}\n"
+                        #                 else:
+                        #                     _min_i = region1[shared_list[0]].split("-")[
+                        #                         0
+                        #                     ]
+                        #                     _max_i = region1[shared_list[-1]].split(
+                        #                         "-"
+                        #                     )[1]
+                        #                     _max_j = region2[shared_list[0]].split("-")[
+                        #                         1
+                        #                     ]
+                        #                     _min_j = region2[shared_list[-1]].split(
+                        #                         "-"
+                        #                     )[0]
+                        #                     constraint = f"P {_min_i}-{_max_i} {_min_j}-{_max_j}\n"
+                        #                     for value in complementary_1:
+                        #                         constraint += f"P {region1[value[0]]} {region1[value[1]]}\n"
+                        #                     for value in complementary_2:
+                        #                         constraint += f"P {region2[value[0]]} {region2[value[1]]}\n"
 
-                                mfold.run(
-                                    strand1,
-                                    strand2,
-                                    constraint,
-                                    f"{i}_{j}.seq",
-                                    f"{i}_{j}.aux",
-                                )
-                                with open(f"{i}_{j}.det", "r") as configfile:
-                                    for line in configfile:
-                                        if line.startswith(" dG = "):
-                                            self.energy[i][j] = abs(float(line[10:15]))
-                                            break
+                        #         mfold.run(
+                        #             strand1,
+                        #             strand2,
+                        #             constraint,
+                        #             f"{i}_{j}.seq",
+                        #             f"{i}_{j}.aux",
+                        #         )
+                        #         with open(f"{i}_{j}.det", "r") as configfile:
+                        #             for line in configfile:
+                        #                 if line.startswith(" dG = "):
+                        #                     self.energy[i][j] = abs(float(line[10:15]))
+                        #                     break
 
-                        del data
+                        # del data
                         higher = 0
                         for i in range(len(self.energy)):
                             for j in range(len(self.energy)):
@@ -2821,6 +3103,10 @@ class DNA_origami(QWidget):
                 self.automate = False
 
                 self.run_calculation()
+                find_thief(self)
+                self.highlight_thief()
+                # clear_files()
+                self.update()
                 self.progress.setFormat("DONE")
 
                 clear_files()
@@ -2902,26 +3188,48 @@ class DNA_origami(QWidget):
                 orientation="vertical",
             )
 
-            to_avoid = ""
+            cwd = os.getcwd()
+            test = os.listdir(cwd)
+
             structure = {}
+            to_avoid = ""
             for count in range(2):
-                higher = 0
-                for i in range(len(self.energy)):
-                    for j in range(len(self.energy)):
-                        if self.energy[i][j] != None:
-                            if to_avoid != "":
-                                if self.energy[i][j] > higher and (
-                                    i != int(to_avoid.split("-")[0])
-                                    or j != int(to_avoid.split("-")[1])
-                                ):
-                                    higher = self.energy[i][j]
-                                    structure[count] = {"x": i, "y": j}
-                            else:
-                                if self.energy[i][j] > higher:
-                                    higher = self.energy[i][j]
-                                    structure[count] = {"x": i, "y": j}
+                for item in test:
+                    if item.endswith(".png"):
+                        item = item.replace(".png", "")
+                        i = int(item.split("_")[0])
+                        j = int(item.split("_")[1])
+                        if to_avoid != "":
+                            if i != int(to_avoid.split("-")[0]) or j != int(
+                                to_avoid.split("-")[1]
+                            ):
+                                structure[count] = {"x": i, "y": j}
+                        else:
+                            structure[count] = {"x": i, "y": j}
 
                 to_avoid = str(structure[count]["x"]) + "-" + str(structure[count]["y"])
+
+            # print(structure)
+            # to_avoid = ""
+            # structure = {}
+            # for count in range(2):
+            #     higher = 0
+            #     for i in range(len(self.energy)):
+            #         for j in range(len(self.energy)):
+            #             if self.energy[i][j] != None:
+            #                 if to_avoid != "":
+            #                     if self.energy[i][j] > higher and (
+            #                         i != int(to_avoid.split("-")[0])
+            #                         or j != int(to_avoid.split("-")[1])
+            #                     ):
+            #                         higher = self.energy[i][j]
+            #                         structure[count] = {"x": i, "y": j}
+            #                 else:
+            #                     if self.energy[i][j] > higher:
+            #                         higher = self.energy[i][j]
+            #                         structure[count] = {"x": i, "y": j}
+
+            #     to_avoid = str(structure[count]["x"]) + "-" + str(structure[count]["y"])
 
             for _ in range(len(structure)):
                 ax.add_patch(
